@@ -70,6 +70,22 @@ data/
 
 修改后重启应用。更换模型后还需运行一次 `npm run setup` 下载新模型。
 
+## 测试
+
+```bash
+npm test        # 全部自动化测试（Node 内置 test runner，无额外依赖）
+npm run check   # 语法检查
+```
+
+测试覆盖前端 `createId`、配置与 Host 校验、会话与图片存储、Ollama 客户端（请求构造、流式解析、中止）和 HTTP API 集成（含生成锁与停止生成）。测试使用进程内假 Ollama 和临时数据目录，不需要真实模型，不读写真实 `data/`，通常 1 秒内跑完。
+
+两个环境变量主要用于测试和高级场景，正常运行无需设置：
+
+- `LOCAL_AI_DATA_DIR`：覆盖数据目录（默认 `config.json` 的 `dataDir`）。
+- `LOCAL_AI_OLLAMA_URL`：覆盖 Ollama 地址（默认 `http://127.0.0.1:11434`）。
+
+另有 `LOCAL_AI_ALLOW_LAN=1` 可监听 `0.0.0.0` 并放行私网 IPv4 的 Host 头，用于局域网访问；默认仍只监听 `127.0.0.1`。
+
 ## 常见问题
 
 ### 模型尚未就绪

@@ -1,6 +1,6 @@
 # 项目状态快照：本地 AI 助手
 
-更新时间：2026-11-20。本文件是项目级状态快照，新会话先读本文件，再按需深入子文件。
+更新时间：2026-11-21。本文件是项目级状态快照，新会话先读本文件，再按需深入子文件。
 
 ## 目标与验收
 
@@ -13,6 +13,13 @@
 首版已完成并在 Linux 真机验证：中文流式对话、图片 OCR 与总结、停止生成、失败重试、会话新建/切换/删除、历史与图片持久化、断网可用。实测：模型保持加载时短文字首字约 1.1 秒、约 10 token/s；1440×1000 中文截图 OCR 加总结约 4 分 18 秒，推理内存约 2.4 GiB。
 
 最近完成（2026-11-20 21:40）：修复局域网访问时 `crypto.randomUUID is not a function`。原因：通过 `http://192.168.31.7:43210` 访问属于非安全 HTTP 环境，浏览器禁用 `crypto.randomUUID()`；`public/app.mjs` 增加了本机 UUID 兼容回退。发送、流式、停止均已回归验证，`npm run check` 通过。
+
+2026-11-21：建立自动化测试（`npm test`，51 用例全绿，约 1 秒），过程中修复两个真实 bug：
+
+1. `public/app.mjs:37` 笔误 `globalThis.createId()`：本机回环访问（安全上下文）发送消息必抛 TypeError，此前局域网验证走的是回退分支所以未暴露。已抽取为 `public/id.mjs` 并修复为 `globalThis.crypto.randomUUID()`，三条路径均有回归测试。
+2. 停止生成监听 `req 'close'` 不可靠：客户端断开后不触发，上游生成不中止、消息不保存。已改为 `res 'close'` + `!res.writableEnded` 守卫（`src/app.mjs`），集成测试验证停止后保存 stopped 部分回答、生成锁释放。
+
+另新增 `LOCAL_AI_DATA_DIR` / `LOCAL_AI_OLLAMA_URL` 环境变量覆盖（测试 seam，见 `docs/adr/0001-testing-strategy.md`）。服务已用新代码重启（`LOCAL_AI_ALLOW_LAN=1 npm start`），真实模型短问答冒烟通过，测试会话已清理。前端修复为静态文件，**其他设备需刷新页面（必要时强制刷新）后生效**。
 
 服务当前在运行：应用 `0.0.0.0:43210`，Ollama `127.0.0.1:11434`。
 
@@ -42,13 +49,17 @@
 
 ## 验证与测试
 
-项目没有自动化测试，唯一检查是 `npm run check`（对全部 src 和 public 模块做 `node --check` 语法检查）。功能验证靠真实浏览器端回归。
+- `npm test`：51 个用例，Node 内置 `node:test`，零依赖，约 1 秒。覆盖前端 `createId`、config/Host 校验、storage 原子写入、chat-store（含损坏隔离）、image-store 签名校验、ollama 请求构造与流式/中止、HTTP API 集成（路径穿越、生成锁、停止生成）。
+- 测试一律用进程内假 Ollama + 临时数据目录，不加载真实模型、不读写真实 `data/`；真实模型验证保持手工冒烟。
+- `npm run check`：全部 src 与 public 模块（含 `public/id.mjs`）的 `node --check` 语法检查。
+- 前端 DOM 交互无自动化测试，仍靠浏览器手工回归。
+- 术语见 `CONTEXT.md`；测试策略决策见 `docs/adr/0001-testing-strategy.md`。
 
 ## 遗留事项 / 下一步候选
 
-- git 基线：项目此前无版本控制，2026-11-20 初始化仓库（main 分支）并提交首个基线，仓库级署名 `wuhaoyu2222 <wuhaoyu2222@gmail.com>`（未改全局配置）；`data/`、`runtime/`、`.superpowers/` 不入库。
+- git：2026-11-20 初始化仓库（main 分支）并提交首个基线 `78d6956`；2026-11-21 提交测试与 bug 修复。仓库级署名 `wuhaoyu2222 <wuhaoyu2222@gmail.com>`（未改全局配置）；`data/`、`runtime/`、`.superpowers/` 不入库。`handoff/continuations/` 下当前会话的自动草稿不纳入功能提交。
 - M2 MacBook 迁移：README 已有安装、迁移、Metal 加速和切换 `qwen3-vl:4b-instruct-q4_K_M` 的步骤，**尚未真机验证**，不能标记完成。
-- 可选方向：补自动化测试、文档问答（独立阶段）、M2 真机适配验证。新功能用 `/grill-with-docs` 明确范围后再 `/implement`；疑难 bug 用 `/diagnosing-bugs`。
+- 可选方向：文档问答（独立阶段）、M2 真机适配验证、前端 DOM 交互测试（目前无基建）。新功能用 `/grill-with-docs` 明确范围后再 `/implement`；疑难 bug 用 `/diagnosing-bugs`。
 
 ## 阅读清单
 
@@ -57,8 +68,10 @@
 3. `config.json`、`src/config.mjs` — 模型/端口/数据目录与局域网开关。
 4. `src/server.mjs`、`src/app.mjs` — HTTP 服务与 API。
 5. `src/ollama.mjs` — Ollama 客户端与流式转发。
-6. `public/app.mjs` — 前端交互（含 randomUUID 回退）。
-7. `scripts/` — setup/start 脚本。
+6. `public/app.mjs`、`public/id.mjs` — 前端交互与 ID 生成（含 randomUUID 回退）。
+7. `CONTEXT.md`、`docs/adr/0001-testing-strategy.md` — 领域术语与测试策略决策。
+8. `test/` — 自动化测试与 `test/helpers/`（假 Ollama、临时数据目录）。
+9. `scripts/` — setup/start 脚本。
 
 ## 相关文件
 

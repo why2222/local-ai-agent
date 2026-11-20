@@ -7,7 +7,7 @@ export const ROOT_DIR = path.resolve(SRC_DIR, '..');
 
 export const ALLOW_LAN = process.env.LOCAL_AI_ALLOW_LAN === '1';
 export const HOST = ALLOW_LAN ? '0.0.0.0' : '127.0.0.1';
-export const OLLAMA_URL = 'http://127.0.0.1:11434';
+export const OLLAMA_URL = process.env.LOCAL_AI_OLLAMA_URL || 'http://127.0.0.1:11434';
 
 const DEFAULTS = {
   model: 'qwen3-vl:2b-instruct-q4_K_M',
@@ -50,7 +50,7 @@ function resolveConfig() {
     throw new Error('config.json: dataDir 必须是非空字符串');
   }
 
-  const dataDir = path.resolve(ROOT_DIR, config.dataDir);
+  const dataDir = path.resolve(ROOT_DIR, process.env.LOCAL_AI_DATA_DIR || config.dataDir);
   const chatsDir = path.join(dataDir, 'chats');
   const imagesDir = path.join(dataDir, 'images');
   const quarantineDir = path.join(dataDir, 'quarantine');

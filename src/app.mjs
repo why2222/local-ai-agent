@@ -276,8 +276,8 @@ async function handlePostMessage(req, res, chatId) {
 
   const abort = new AbortController();
   const idleTimer = setTimeout(() => abort.abort(new Error('idle-timeout')), GENERATION_IDLE_TIMEOUT_MS);
-  const onClose = () => abort.abort(new Error('client-abort'));
-  req.on('close', onClose);
+  const onClose = () => { if (!res.writableEnded) abort.abort(new Error('client-abort')); };
+  res.on('close', onClose);
 
   let fullText = '';
   let settled = false;
@@ -286,7 +286,7 @@ async function handlePostMessage(req, res, chatId) {
     if (settled) return;
     settled = true;
     clearTimeout(idleTimer);
-    req.off('close', onClose);
+    res.off('close', onClose);
     const assistantMessage = {
       id: randomUUID(),
       role: 'assistant',
