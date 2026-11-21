@@ -31,6 +31,8 @@
 
 2026-11-21 新增文档上传（首版设计预留的文档问答阶段）：支持文本/代码/PDF/DOCX/XLSX（用户指定上限 100 MiB），原文存 `data/documents/` 可查看。解析：PDF 走系统 `pdftotext`（macOS 需 `brew install poppler`），DOCX/XLSX 手写 zip+XML（零 npm 依赖）；`buildSummaryPrompt` 按批次数截断控制 reduce 输入不超 numCtx；zip 解压 64 MiB 上限、XLSX 自闭合标签剔除、Office 原文按 MIME 返回。新增 `src/document-extract.mjs`、`src/document-store.mjs` 及 `POST documents`、`POST documents/:id/summarize`、`GET documents/:id` API。附件入口按 Kimi 风格合并为单个"+"按钮弹菜单。**交互后经用户修正：选择文档后不自动发送，由用户可选输入处理要求（instruction）再点击发送，文档重试为重新 summarize**。曾出现"运行一段时间 network error"，诊断为开发期重启服务中断摘要，非应用 bug。见 `docs/adr/0006-document-upload.md`。
 
+2026-11-21 流式体验优化：等待三点动画、文档进度单行显示（修复竖排 bug 与重复指示）、阶段文案区分、滚动仅在底部附近自动跟随（上滑显示"回到底部"）、Markdown 渲染增强（`public/markdown.mjs`：标题/表格/链接/引用/分隔线，链接协议白名单）。**重要：文档摘要每批与汇总限制 `num_predict=400`**——实测 2B 模型在含表格提示下会无限生成（llama-server 高 CPU 20+ 分钟），`streamChat` 新增 numPredict 参数防失控。见 `docs/adr/0007-streaming-ui-markdown.md`。
+
 服务当前在运行：应用 `0.0.0.0:43210`，Ollama `127.0.0.1:11434`。**2026-11-21 已按用户确认启用远程访问模式**：`LOCAL_AI_ALLOW_LAN=1` + `LOCAL_AI_REMOTE_HOST=remote-access-18266.zconnect.cn` + `LOCAL_AI_REMOTE_TOKEN`（令牌仅存于进程环境变量，不写入本文档与仓库）。启动时全链路已验证：回环/局域网 200、远程无令牌或错令牌 401、正确令牌 API 200、页面 302+安全 Cookie、Cookie 访问 200、其他域名 403。关闭方式：去掉这两个 REMOTE 环境变量重启。
 
 ## 关键决策
@@ -60,7 +62,7 @@
 
 ## 验证与测试
 
-- `npm test`：113 个用例，Node 内置 `node:test`，零依赖，约 1 秒。覆盖前端 `createId`、config/Host 校验、storage 原子写入、chat-store（含损坏隔离）、image-store 签名校验、ollama 请求构造与流式/中止、HTTP API 集成（路径穿越、生成锁、停止生成）、模型目录与推荐分档（含 Apple Silicon）、模型列表/切换/下载 API（进度、错误、下载锁）、远程访问模式（令牌、Cookie、Origin、配置校验）、在线目录解析/缓存/合并与纯文本图片拦截、面板视图过滤分组、文档提取（txt/pdf/docx/xlsx）与分批摘要 API。
+- `npm test`：121 个用例，Node 内置 `node:test`，零依赖，约 1 秒。覆盖前端 `createId`、config/Host 校验、storage 原子写入、chat-store（含损坏隔离）、image-store 签名校验、ollama 请求构造与流式/中止/输出上限、HTTP API 集成（路径穿越、生成锁、停止生成）、模型目录与推荐分档（含 Apple Silicon）、模型列表/切换/下载 API（进度、错误、下载锁）、远程访问模式（令牌、Cookie、Origin、配置校验）、在线目录解析/缓存/合并与纯文本图片拦截、面板视图过滤分组、文档提取（txt/pdf/docx/xlsx）与分批摘要 API、Markdown 解析。
 - 测试一律用进程内假 Ollama + 临时数据目录，不加载真实模型、不读写真实 `data/`；真实模型验证保持手工冒烟。
 - `npm run check`：全部 src 与 public 模块（含 `public/id.mjs`）的 `node --check` 语法检查。
 - 前端 DOM 交互无自动化测试，仍靠浏览器手工回归。

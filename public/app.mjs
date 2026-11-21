@@ -1,6 +1,7 @@
 import { createId } from './id.mjs';
 import { request, requestJson } from './http.mjs';
 import { openSettings } from './settings.mjs';
+import { parseMarkdownBlocks, parseInline, isSafeLink } from './markdown.mjs';
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -44,6 +45,7 @@ const state = {
   selectedFileUrl: null,
   selectedDocument: null,
   currentVision: true,
+  followScroll: true,
 };
 
 function icon(name, className = 'icon') {
@@ -212,6 +214,37 @@ function renderChat() {
   requestAnimationFrame(() => scrollToBottom(false));
 }
 
+function createStatusIndicator(text) {
+  const status = document.createElement('div');
+  status.className = 'status-indicator';
+  const dots = document.createElement('span');
+  dots.className = 'dots';
+  dots.append(document.createElement('i'), document.createElement('i'), document.createElement('i'));
+  status.append(dots, document.createTextNode(text));
+  return status;
+}
+
+function createDocProgress(progressText, ratio = null) {
+  const wrap = document.createElement('div');
+  wrap.className = 'doc-progress';
+  const label = document.createElement('div');
+  label.className = 'label';
+  const dots = document.createElement('span');
+  dots.className = 'dots';
+  dots.append(document.createElement('i'), document.createElement('i'), document.createElement('i'));
+  const text = document.createElement('span');
+  text.className = 'label-text';
+  text.textContent = progressText;
+  label.append(dots, text);
+  const bar = document.createElement('div');
+  bar.className = 'bar';
+  const fill = document.createElement('span');
+  fill.style.width = ratio === null ? '20%' : `${Math.round(ratio * 100)}%`;
+  bar.append(fill);
+  wrap.append(label, bar);
+  return wrap;
+}
+
 function renderMessage(message) {
   const article = document.createElement('article');
   article.className = `message ${message.role}`;
@@ -236,7 +269,15 @@ function renderMessage(message) {
   avatar.append(icon('spark'));
   const body = document.createElement('div');
   body.className = 'message-body';
-  body.append(renderFormattedText(message.content || message.text || '', message.status === 'streaming'));
+  const isEmptyStreaming = message.status === 'streaming' && !(message.content || message.text);
+  if (message.status === 'streaming' && message.progress) {
+    body.append(createDocProgress(message.progress, message.progressRatio ?? null));
+  }
+  if (isEmptyStreaming) {
+    if (!message.progress) body.append(createStatusIndicator('正在思考…'));
+  } else {
+    body.append(renderFormattedText(message.content || message.text || '', message.status === 'streaming'));
+  }
   if (message.documentId) body.append(createDocumentLink('查看原文', message.documentId));
   if (message.status && message.status !== 'complete' && message.status !== 'completed' && message.status !== 'streaming') {
     const status = document.createElement('div');
@@ -279,100 +320,113 @@ function createMessageImage(imageId) {
 }
 
 function appendInline(parent, text) {
-  const pattern = /(\*\*[^*]+\*\*|`[^`\n]+`)/g;
-  let lastIndex = 0;
-  for (const match of text.matchAll(pattern)) {
-    if (match.index > lastIndex) parent.append(document.createTextNode(text.slice(lastIndex, match.index)));
-    const token = match[0];
-    if (token.startsWith('**')) {
+  for (const token of parseInline(text)) {
+    if (token.type === 'text') {
+      parent.append(document.createTextNode(token.text));
+    } else if (token.type === 'bold') {
       const strong = document.createElement('strong');
-      strong.textContent = token.slice(2, -2);
+      strong.textContent = token.text;
       parent.append(strong);
-    } else {
+    } else if (token.type === 'code') {
       const code = document.createElement('code');
-      code.textContent = token.slice(1, -1);
+      code.textContent = token.text;
       parent.append(code);
+    } else if (token.type === 'link') {
+      if (isSafeLink(token.href)) {
+        const a = document.createElement('a');
+        a.textContent = token.text;
+        a.href = token.href;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        parent.append(a);
+      } else {
+        parent.append(document.createTextNode(token.text));
+      }
     }
-    lastIndex = match.index + token.length;
   }
-  if (lastIndex < text.length) parent.append(document.createTextNode(text.slice(lastIndex)));
 }
 
 function renderFormattedText(text, streaming = false) {
   const container = document.createElement('div');
   if (streaming) container.className = 'streaming-caret';
-  const lines = text.replace(/\r\n/g, '\n').split('\n');
-  let paragraph = [];
-  let list = null;
-  let codeBlock = null;
-
-  const flushParagraph = () => {
-    if (!paragraph.length) return;
-    const p = document.createElement('p');
-    appendInline(p, paragraph.join('\n'));
-    container.append(p);
-    paragraph = [];
-  };
-  const flushList = () => {
-    if (list) container.append(list);
-    list = null;
-  };
-
-  for (const line of lines) {
-    if (line.trim().startsWith('```')) {
-      flushParagraph();
-      flushList();
-      if (codeBlock) {
-        const pre = document.createElement('pre');
-        const code = document.createElement('code');
-        code.textContent = codeBlock.join('\n');
-        pre.append(code);
-        container.append(pre);
-        codeBlock = null;
-      } else {
-        codeBlock = [];
+  for (const block of parseMarkdownBlocks(text)) {
+    if (block.type === 'paragraph') {
+      const p = document.createElement('p');
+      appendInline(p, block.text);
+      container.append(p);
+    } else if (block.type === 'heading') {
+      const h = document.createElement(`h${Math.min(block.level + 2, 6)}`);
+      appendInline(h, block.text);
+      container.append(h);
+    } else if (block.type === 'hr') {
+      container.append(document.createElement('hr'));
+    } else if (block.type === 'quote') {
+      const q = document.createElement('blockquote');
+      appendInline(q, block.text);
+      container.append(q);
+    } else if (block.type === 'table') {
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const headRow = document.createElement('tr');
+      for (const cell of block.header) {
+        const th = document.createElement('th');
+        appendInline(th, cell);
+        headRow.append(th);
       }
-      continue;
-    }
-    if (codeBlock) {
-      codeBlock.push(line);
-      continue;
-    }
-    const listMatch = line.match(/^\s*(?:([-+*])|(\d+)[.)])\s+(.+)$/);
-    if (listMatch) {
-      flushParagraph();
-      const ordered = Boolean(listMatch[2]);
-      if (!list || (list.tagName === 'OL') !== ordered) {
-        flushList();
-        list = document.createElement(ordered ? 'ol' : 'ul');
+      thead.append(headRow);
+      table.append(thead);
+      const tbody = document.createElement('tbody');
+      for (const row of block.rows) {
+        const tr = document.createElement('tr');
+        for (const cell of row) {
+          const td = document.createElement('td');
+          appendInline(td, cell);
+          tr.append(td);
+        }
+        tbody.append(tr);
       }
-      const item = document.createElement('li');
-      appendInline(item, listMatch[3]);
-      list.append(item);
-      continue;
-    }
-    flushList();
-    if (!line.trim()) {
-      flushParagraph();
-    } else {
-      paragraph.push(line);
+      table.append(tbody);
+      container.append(table);
+    } else if (block.type === 'list') {
+      const list = document.createElement(block.ordered ? 'ol' : 'ul');
+      for (const item of block.items) {
+        const li = document.createElement('li');
+        appendInline(li, item);
+        list.append(li);
+      }
+      container.append(list);
+    } else if (block.type === 'code') {
+      const pre = document.createElement('pre');
+      const code = document.createElement('code');
+      code.textContent = block.text;
+      pre.append(code);
+      container.append(pre);
     }
   }
-  if (codeBlock) {
-    const pre = document.createElement('pre');
-    const code = document.createElement('code');
-    code.textContent = codeBlock.join('\n');
-    pre.append(code);
-    container.append(pre);
-  }
-  flushParagraph();
-  flushList();
   return container;
 }
 
 function scrollToBottom(smooth = true) {
   elements.messages.scrollTo({ top: elements.messages.scrollHeight, behavior: smooth ? 'smooth' : 'instant' });
 }
+
+function maybeScrollToBottom() {
+  if (state.followScroll) scrollToBottom(false);
+}
+
+function updateFollowScroll() {
+  const distance = elements.messages.scrollHeight - elements.messages.scrollTop - elements.messages.clientHeight;
+  state.followScroll = distance < 80;
+  const backBottom = document.getElementById('back-bottom');
+  backBottom.hidden = state.followScroll || !state.generating;
+}
+
+elements.messages.addEventListener('scroll', updateFollowScroll);
+document.getElementById('back-bottom').addEventListener('click', () => {
+  state.followScroll = true;
+  document.getElementById('back-bottom').hidden = true;
+  scrollToBottom();
+});
 
 function setGenerating(generating) {
   state.generating = generating;
@@ -384,6 +438,7 @@ function setGenerating(generating) {
   elements.attachMenuButton.disabled = generating;
   updateSendState();
   renderChatList();
+  updateFollowScroll();
 }
 
 function updateSendState() {
@@ -631,24 +686,38 @@ async function consumeDocumentStream(response, assistantMessage) {
   const body = article?.querySelector('.message-body');
 
   const updateProgress = () => {
-    if (!article) return;
-    let progress = article.querySelector('.document-progress');
-    if (!progress) {
-      progress = document.createElement('div');
-      progress.className = 'document-progress';
-      article.append(progress);
+    if (!body) return;
+    let progressEl = body.querySelector('.doc-progress');
+    if (!progressEl) {
+      progressEl = createDocProgress(assistantMessage.progress || '', assistantMessage.progressRatio ?? null);
+      body.prepend(progressEl);
+    } else {
+      progressEl.querySelector('.label-text').textContent = assistantMessage.progress || '';
+      if (assistantMessage.progressRatio != null) {
+        progressEl.querySelector('.bar span').style.width = `${Math.round(assistantMessage.progressRatio * 100)}%`;
+      }
     }
-    progress.textContent = assistantMessage.progress || '';
-    if (body) body.replaceChildren(renderFormattedText(assistantMessage.content, true));
-    scrollToBottom(false);
+    let textEl = body.querySelector('.text-content');
+    if (!textEl) {
+      textEl = document.createElement('div');
+      textEl.className = 'text-content';
+      body.append(textEl);
+    }
+    if (assistantMessage.content) {
+      body.querySelector('.status-indicator')?.remove();
+      textEl.replaceChildren(renderFormattedText(assistantMessage.content, true));
+    }
+    maybeScrollToBottom();
   };
 
   const applyEvent = (event) => {
     if (event.type === 'batch') {
-      assistantMessage.progress = `正在总结第 ${event.index}/${event.total} 批`;
+      assistantMessage.progress = `正在处理文档 · 第 ${event.index}/${event.total} 批`;
+      assistantMessage.progressRatio = event.index / event.total;
       updateProgress();
     } else if (event.type === 'final-start') {
       assistantMessage.progress = '正在汇总摘要';
+      assistantMessage.progressRatio = 1;
       updateProgress();
     } else if (event.type === 'delta') {
       assistantMessage.content += event.text || '';
@@ -696,7 +765,7 @@ async function consumeStream(response, assistantMessage) {
     if (event.type === 'delta') {
       assistantMessage.content += event.text || event.content || event.message?.content || '';
       if (body) body.replaceChildren(renderFormattedText(assistantMessage.content, true));
-      scrollToBottom(false);
+      maybeScrollToBottom();
     } else if (event.type === 'done') {
       const finalMessage = event.message || event.assistantMessage;
       if (finalMessage?.content) assistantMessage.content = finalMessage.content;

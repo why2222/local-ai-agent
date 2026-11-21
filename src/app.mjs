@@ -485,6 +485,7 @@ async function handleSummarizeDocument(req, res, chatId, docId) {
             : `请用中文简洁总结以下文档片段（第${i + 1}/${batches.length}批）：\n\n${batches[i]}`,
         }],
         signal: abort.signal,
+        numPredict: 400,
       })) {
         partial += delta;
         fullText += delta;
@@ -502,6 +503,7 @@ async function handleSummarizeDocument(req, res, chatId, docId) {
     for await (const delta of streamChat({
       messages: [{ role: 'user', content: summaryPrompt }],
       signal: abort.signal,
+      numPredict: 400,
     })) {
       fullText += delta;
       if (!writeNdjson(res, { type: 'delta', text: delta, final: true })) {

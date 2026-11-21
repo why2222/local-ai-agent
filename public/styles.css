@@ -555,3 +555,38 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 .attach-menu-item:hover { background: var(--accent-soft); color: var(--accent-dark); }
 .attach-menu-item .icon { width: 15px; height: 15px; color: var(--muted); }
 .attach-menu-item:hover .icon { color: var(--accent-dark); }
+.status-indicator { display: inline-flex; align-items: center; gap: 8px; padding: 6px 0; color: var(--secondary); font-size: 12px; }
+.dots { display: inline-flex; gap: 4px; }
+.dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: dot-bounce 1.2s ease-in-out infinite; }
+.dots i:nth-child(2) { animation-delay: .15s; }
+.dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes dot-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: .4; } 30% { transform: translateY(-4px); opacity: 1; } }
+.doc-progress { margin-bottom: 12px; }
+.doc-progress .label { display: flex; align-items: center; gap: 8px; color: var(--secondary); font-size: 12px; }
+.doc-progress .bar { height: 4px; margin-top: 8px; overflow: hidden; border-radius: 3px; background: #e9e5ef; }
+.doc-progress .bar > span { display: block; height: 100%; border-radius: 3px; background: var(--accent); transition: width 250ms ease; }
+.back-bottom {
+  position: absolute;
+  right: 26px;
+  bottom: 132px;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 13px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  color: var(--secondary);
+  font-size: 11px;
+  box-shadow: 0 4px 14px rgba(48, 40, 66, .12);
+}
+.back-bottom:hover { color: var(--accent-dark); border-color: #c4bdd0; }
+.main { position: relative; }
+.message-body h3, .message-body h4, .message-body h5, .message-body h6 { margin: 16px 0 8px; font-size: 15px; font-weight: 600; }
+.message-body hr { margin: 16px 0; border: 0; border-top: 1px solid var(--line); }
+.message-body blockquote { margin: 12px 0; padding: 8px 14px; border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; background: #f5f2fa; color: var(--secondary); line-height: 1.7; }
+.message-body table { width: 100%; margin: 12px 0; border-collapse: collapse; font-size: 12px; }
+.message-body th, .message-body td { padding: 8px 12px; border: 1px solid var(--line); text-align: left; }
+.message-body th { background: var(--accent-soft); font-weight: 600; }
+.message-body a { color: var(--accent-dark); text-decoration: underline; text-underline-offset: 3px; }

@@ -149,3 +149,16 @@ test('buildOllamaMessages 非 assistant 角色统一映射为 user', () => {
   const result = buildOllamaMessages(chat, current, null);
   assert.equal(result[0].role, 'user');
 });
+
+test('streamChat 支持 numPredict 输出上限（防止模型无限生成）', async () => {
+  fake.state.onChat = (payload, req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
+    writeNdjsonLines(res, [{ message: { content: '短摘要' } }, { message: { content: '' }, done: true }]);
+  };
+  const deltas = [];
+  for await (const delta of streamChat({ messages: [], numPredict: 800 })) deltas.push(delta);
+  assert.deepEqual(deltas, ['短摘要']);
+  const sent = fake.state.requests.at(-1);
+  assert.equal(sent.options.num_predict, 800);
+  assert.equal(sent.options.num_ctx, CONFIG.numCtx);
+});
