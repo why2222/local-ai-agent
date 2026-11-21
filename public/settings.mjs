@@ -1,4 +1,5 @@
 import { requestJson } from './http.mjs';
+import { filterModelsForView } from './model-view.mjs';
 
 const dialog = document.getElementById('settings-dialog');
 const deviceCard = document.getElementById('settings-device');
@@ -6,12 +7,15 @@ const cardsBox = document.getElementById('settings-models');
 const errorBox = document.getElementById('settings-error');
 
 let catalog = [];
+let cacheInfo = null;
 let downloading = null;
 let confirmDownloadId = null;
 let remoteConfirming = false;
 let remoteConfirmTimer = null;
 let notifyChanged = () => {};
 let lastPaint = 0;
+let expandedId;
+const view = { searchText: '', filterType: 'all', remoteExpanded: false };
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -35,32 +39,16 @@ function showError(message) {
 async function loadModels() {
   const data = await requestJson('/api/models');
   catalog = data.models;
-  renderCacheInfo(data.cache);
+  cacheInfo = data.cache;
+  if (expandedId === undefined) expandedId = data.current;
   renderDevice(data.device);
   renderModels();
 }
 
-function renderCacheInfo(cache) {
-  const info = document.getElementById('remote-cache-info');
-  info.textContent = cache?.fetchedAt
-    ? `在线目录 ${cache.count} 个模型 · 更新于 ${new Date(cache.fetchedAt).toLocaleString('zh-CN')}`
-    : '内置目录，可在线获取更多模型';
-}
-
 function renderDevice(device) {
-  deviceCard.replaceChildren();
   const memGB = (bytes) => (bytes / 1024 ** 3).toFixed(1);
   const platform = device.isAppleSilicon ? 'macOS · Apple Silicon（Metal 加速）' : `${device.platform} · ${device.arch}`;
-  const items = [
-    [`${device.cpuModel}`, `${device.cores} 核处理器`],
-    [`${memGB(device.totalMemBytes)} GiB`, `内存 · 当前可用约 ${memGB(device.freeMemBytes)} GiB`],
-    [platform, '运行平台'],
-  ];
-  for (const [value, label] of items) {
-    const item = el('div', 'device-item');
-    item.append(el('strong', '', value), el('span', '', label));
-    deviceCard.append(item);
-  }
+  deviceCard.textContent = `${device.cpuModel} · ${device.cores} 核 · ${memGB(device.totalMemBytes)} GiB 内存（可用约 ${memGB(device.freeMemBytes)} GiB） · ${platform}`;
 }
 
 const LEVEL_TEXT = { recommended: '推荐', usable: '可试', 'not-recommended': '不推荐' };
@@ -111,28 +99,84 @@ function actionFor(model) {
   return box;
 }
 
+function modelRow(model) {
+  const row = el('div', `model-row${expandedId === model.id ? ' expanded' : ''}${model.inUse ? ' in-use' : ''}`);
+  row.dataset.modelId = model.id;
+  const nameButton = el('button', 'name name-button', `${model.family} · ${model.params}`);
+  nameButton.type = 'button';
+  nameButton.setAttribute('aria-expanded', String(expandedId === model.id));
+  nameButton.setAttribute('aria-controls', `detail-${model.id}`);
+  nameButton.addEventListener('click', () => toggleExpanded(model));
+  row.append(nameButton);
+  row.append(el('span', `model-badge ${model.recommendation.level}`, LEVEL_TEXT[model.recommendation.level]));
+  if (!model.vision) row.append(el('span', 'model-badge neutral', '纯文本'));
+  if (model.inUse) row.append(el('span', 'model-badge in-use', '使用中'));
+  else if (model.downloaded) row.append(el('span', 'model-badge neutral', '已下载'));
+  row.append(el('span', 'sp'));
+  row.append(el('span', 'meta', model.sizeGB ? `${model.sizeGB} GB` : '—'));
+  row.append(actionFor(model));
+  row.addEventListener('click', (event) => {
+    if (event.target.closest('button')) return;
+    toggleExpanded(model);
+  });
+  return row;
+}
+
+function toggleExpanded(model) {
+  expandedId = expandedId === model.id ? null : model.id;
+  renderModels();
+  if (expandedId) {
+    const button = cardsBox.querySelector(`[data-model-id="${CSS.escape(expandedId)}"] .name-button`);
+    button?.focus();
+  }
+}
+
+function modelDetail(model) {
+  const detail = el('div', 'model-detail');
+  detail.id = `detail-${model.id}`;
+  detail.append(el('p', 'summary', model.summary));
+  const kv = el('div', 'kv');
+  const items = [
+    [model.capabilities.chinese, '中文能力'],
+    [model.capabilities.ocr, 'OCR'],
+    [model.capabilities.speed, '生成速度'],
+    [model.sizeGB ? `${model.sizeGB} GB` : '未知', '模型体积'],
+  ];
+  for (const [value, label] of items) {
+    const cell = el('div');
+    cell.append(el('b', '', value), el('span', '', label));
+    kv.append(cell);
+  }
+  detail.append(kv);
+  detail.append(el('div', 'reason', model.recommendation.reason));
+  return detail;
+}
+
 function renderModels() {
   cardsBox.replaceChildren();
-  let lastVision = null;
-  for (const model of catalog) {
-    if (model.vision !== lastVision) {
-      lastVision = model.vision;
-      cardsBox.append(el('div', 'model-group-label', model.vision ? '多模态 · 支持图片' : '纯文本 · 不支持图片'));
+  const groups = filterModelsForView(catalog, view);
+  if (!groups.length) {
+    cardsBox.append(el('div', 'history-empty', '没有匹配的模型，试试其他搜索词'));
+    return;
+  }
+  for (const group of groups) {
+    if (group.key === 'remote' && group.collapsed) {
+      const fold = el('button', 'model-fold');
+      fold.type = 'button';
+      const updated = cacheInfo?.fetchedAt ? `更新于 ${new Date(cacheInfo.fetchedAt).toLocaleDateString('zh-CN')}` : '';
+      fold.append(el('span', '', group.label), el('small', '', updated));
+      fold.addEventListener('click', () => {
+        view.remoteExpanded = true;
+        renderModels();
+      });
+      cardsBox.append(fold);
+      continue;
     }
-    const card = el('article', `model-card${model.inUse ? ' in-use' : ''}`);
-    const head = el('div', 'model-card-head');
-    head.append(el('strong', '', `${model.family} · ${model.params}`));
-    head.append(el('span', `model-badge ${model.recommendation.level}`, LEVEL_TEXT[model.recommendation.level]));
-    if (!model.vision) head.append(el('span', 'model-badge usable', '纯文本'));
-    if (model.inUse) head.append(el('span', 'model-badge in-use', '使用中'));
-    if (model.downloaded && !model.inUse) head.append(el('span', 'model-badge usable', '已下载'));
-    card.append(head);
-    card.append(el('p', 'model-summary', model.summary));
-    const sizeText = model.sizeGB ? `约 ${model.sizeGB} GB` : '大小未知';
-    card.append(el('div', 'model-meta', `中文 ${model.capabilities.chinese} · OCR ${model.capabilities.ocr} · 速度 ${model.capabilities.speed} · ${sizeText}`));
-    card.append(el('p', 'model-reason', model.recommendation.reason));
-    card.append(actionFor(model));
-    cardsBox.append(card);
+    cardsBox.append(el('div', 'model-group-label', group.label));
+    for (const model of group.models) {
+      cardsBox.append(modelRow(model));
+      if (expandedId === model.id) cardsBox.append(modelDetail(model));
+    }
   }
 }
 
@@ -151,6 +195,7 @@ async function selectModel(model) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: model.id }),
     });
+    expandedId = model.id;
     await loadModels();
     notifyChanged();
   } catch (error) {
@@ -162,6 +207,7 @@ async function startDownload(model) {
   showError();
   confirmDownloadId = null;
   downloading = { id: model.id, controller: new AbortController(), status: '准备下载', completed: 0, total: 0 };
+  expandedId = model.id;
   renderModels();
   try {
     const res = await fetch('/api/models/pull', {
@@ -211,13 +257,6 @@ async function startDownload(model) {
   }
 }
 
-export async function openSettings({ onModelChanged } = {}) {
-  if (onModelChanged) notifyChanged = onModelChanged;
-  showError();
-  if (!dialog.open) dialog.showModal();
-  await loadModels().catch((error) => showError(error.message));
-}
-
 async function fetchRemoteDirectory() {
   const button = document.getElementById('fetch-remote-button');
   if (!remoteConfirming) {
@@ -245,8 +284,30 @@ async function fetchRemoteDirectory() {
   }
 }
 
+export async function openSettings({ onModelChanged } = {}) {
+  if (onModelChanged) notifyChanged = onModelChanged;
+  showError();
+  if (!dialog.open) dialog.showModal();
+  await loadModels().catch((error) => showError(error.message));
+}
+
 document.getElementById('fetch-remote-button').addEventListener('click', fetchRemoteDirectory);
 document.getElementById('settings-close').addEventListener('click', () => dialog.close());
 dialog.addEventListener('click', (event) => {
   if (event.target === dialog) dialog.close();
+});
+document.getElementById('model-search').addEventListener('input', (event) => {
+  view.searchText = event.target.value;
+  renderModels();
+});
+function setFilterType(filterType) {
+  document.querySelectorAll('#model-filters .chip').forEach((c) => {
+    c.classList.toggle('on', c.dataset.filter === filterType);
+  });
+  view.filterType = filterType;
+  renderModels();
+}
+
+document.querySelectorAll('#model-filters .chip').forEach((chip) => {
+  chip.addEventListener('click', () => setFilterType(chip.dataset.filter));
 });

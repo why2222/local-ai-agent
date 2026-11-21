@@ -92,8 +92,17 @@
     <div class="settings-body">
       <section class="device-card" id="settings-device" aria-label="当前设备"></section>
       <div class="settings-toolbar">
+        <label class="settings-search">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#search"></use></svg>
+          <input id="model-search" type="search" placeholder="搜索模型（如 qwen、deepseek、vision）" aria-label="搜索模型">
+        </label>
         <button class="secondary-button" id="fetch-remote-button" type="button">在线获取更多模型</button>
-        <span class="model-meta" id="remote-cache-info">内置目录，可在线获取更多模型</span>
+      </div>
+      <div class="settings-chips" id="model-filters">
+        <button class="chip on" data-filter="all" type="button">全部</button>
+        <button class="chip" data-filter="vision" type="button">多模态</button>
+        <button class="chip" data-filter="text" type="button">纯文本</button>
+        <button class="chip" data-filter="downloaded" type="button">已下载</button>
       </div>
       <div class="settings-error" id="settings-error" role="alert" hidden></div>
       <div class="model-cards" id="settings-models"></div>
