@@ -8,6 +8,7 @@ import { getAllModels, getCacheInfo, isCatalogModel, refreshRemoteModels } from 
 import { getDeviceInfo } from './device.mjs';
 import { DOCUMENT_EXTENSIONS, DocumentError, buildSummaryPrompt } from './document-extract.mjs';
 import { saveDocument, readDocumentMeta, readDocumentBatches, readDocumentRaw } from './document-store.mjs';
+import { generateWithContinuation } from './generate.mjs';
 import { isRemoteHost, checkRemoteAccess } from './remote-access.mjs';
 import {
   createEmptyChat, listChats, getChat, saveChat, deleteChat, summarize,
@@ -476,41 +477,39 @@ async function handleSummarizeDocument(req, res, chatId, docId) {
     const partials = [];
     for (let i = 0; i < batches.length; i += 1) {
       writeNdjson(res, { type: 'batch', index: i + 1, total: batches.length });
-      let partial = '';
-      for await (const delta of streamChat({
-        messages: [{
-          role: 'user',
-          content: instruction
-            ? `用户要求：${instruction}\n\n请根据上述要求处理以下文档片段（第${i + 1}/${batches.length}批）：\n\n${batches[i]}`
-            : `请用中文简洁总结以下文档片段（第${i + 1}/${batches.length}批）：\n\n${batches[i]}`,
-        }],
+      const taskPrompt = instruction
+        ? `用户要求：${instruction}\n\n请根据上述要求处理以下文档片段（第${i + 1}/${batches.length}批）：\n\n${batches[i]}`
+        : `请用中文简洁总结以下文档片段（第${i + 1}/${batches.length}批）：\n\n${batches[i]}`;
+      const result = await generateWithContinuation({
+        messages: [{ role: 'user', content: taskPrompt }],
         signal: abort.signal,
         numPredict: 400,
-      })) {
-        partial += delta;
-        fullText += delta;
-        if (!writeNdjson(res, { type: 'delta', text: delta, batch: i + 1 })) {
-          abort.abort(new Error('client-gone'));
-          throw new OllamaError('aborted', '客户端已断开');
-        }
-      }
-      partials.push(partial);
+        onDelta: (delta) => {
+          fullText += delta;
+          if (!writeNdjson(res, { type: 'delta', text: delta, batch: i + 1 })) {
+            abort.abort(new Error('client-gone'));
+            throw new OllamaError('aborted', '客户端已断开');
+          }
+        },
+      });
+      partials.push(result.text);
       writeNdjson(res, { type: 'batch-done', index: i + 1 });
     }
 
     writeNdjson(res, { type: 'final-start' });
     const summaryPrompt = buildSummaryPrompt(meta.name, partials, instruction);
-    for await (const delta of streamChat({
+    await generateWithContinuation({
       messages: [{ role: 'user', content: summaryPrompt }],
       signal: abort.signal,
       numPredict: 400,
-    })) {
-      fullText += delta;
-      if (!writeNdjson(res, { type: 'delta', text: delta, final: true })) {
-        abort.abort(new Error('client-gone'));
-        throw new OllamaError('aborted', '客户端已断开');
-      }
-    }
+      onDelta: (delta) => {
+        fullText += delta;
+        if (!writeNdjson(res, { type: 'delta', text: delta, final: true })) {
+          abort.abort(new Error('client-gone'));
+          throw new OllamaError('aborted', '客户端已断开');
+        }
+      },
+    });
     await finish('complete');
     writeNdjson(res, { type: 'done', message: chat.messages[chat.messages.length - 1] });
   } catch (err) {

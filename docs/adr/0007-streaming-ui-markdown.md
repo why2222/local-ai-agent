@@ -9,3 +9,7 @@
 ## 摘要输出上限（重要）
 
 实测发现 2B 模型在含表格的摘要提示下会陷入无限生成（llama-server 高 CPU 20+ 分钟不停）。`streamChat` 新增 `numPredict` 参数，文档摘要每批与汇总限制 `num_predict = 400`，防止模型失控拖死任务；普通聊天不限制。该值同时受本机生成速度约束（约 5-10 token/s，400 token/批约 40-90 秒）。
+
+## 截断自动续写与重复检测（后续修正）
+
+用户实测发现 `num_predict = 400` 会把正常长回复截断（摘要停在小标题处）。改为正面处理：`streamChat` 暴露 `done_reason`，`src/generate.mjs` 的 `generateWithContinuation` 在 `done_reason = 'length'` 时自动续写（携带已生成上文 + "接着上文输出剩余部分，不要重复"），直到自然结束；同时检测末尾文本是否由同一单元连续重复（≥3 次）判定死循环并立即中止，续写最多 3 次兜底。`num_predict` 由此从"一刀切截断"降级为"单次输出保险"，长回复可完整生成。

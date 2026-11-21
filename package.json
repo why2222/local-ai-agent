@@ -8,7 +8,7 @@
     "setup": "bash scripts/setup.sh",
     "start": "bash scripts/start.sh",
     "test": "node --test 'test/*.test.mjs'",
-    "check": "node --check src/config.mjs && node --check src/storage.mjs && node --check src/chat-store.mjs && node --check src/image-store.mjs && node --check src/ollama.mjs && node --check src/app.mjs && node --check src/server.mjs && node --check src/model-catalog.mjs && node --check src/device.mjs && node --check src/remote-access.mjs && node --check src/model-library.mjs && node --check src/document-extract.mjs && node --check src/document-store.mjs && node --check public/app.mjs && node --check public/id.mjs && node --check public/settings.mjs && node --check public/http.mjs && node --check public/model-view.mjs && node --check public/markdown.mjs"
+    "check": "node --check src/config.mjs && node --check src/storage.mjs && node --check src/chat-store.mjs && node --check src/image-store.mjs && node --check src/ollama.mjs && node --check src/app.mjs && node --check src/server.mjs && node --check src/model-catalog.mjs && node --check src/device.mjs && node --check src/remote-access.mjs && node --check src/model-library.mjs && node --check src/document-extract.mjs && node --check src/document-store.mjs && node --check src/generate.mjs && node --check public/app.mjs && node --check public/id.mjs && node --check public/settings.mjs && node --check public/http.mjs && node --check public/model-view.mjs && node --check public/markdown.mjs"
   },
   "engines": {
     "node": ">=22.0.0"

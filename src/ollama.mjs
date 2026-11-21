@@ -76,7 +76,7 @@ async function* readNdjsonLines(body) {
 
 // 调用 Ollama /api/chat（stream=true），逐个产出 content 增量。
 // signal 用于中止上游生成（用户停止或超时）。
-export async function* streamChat({ messages, signal, numPredict }) {
+export async function* streamChat({ messages, signal, numPredict, onDone }) {
   let res;
   try {
     res = await fetch(`${CONFIG.ollamaUrl}/api/chat`, {
@@ -129,6 +129,7 @@ export async function* streamChat({ messages, signal, numPredict }) {
       if (content) yield content;
       if (parsed.done) {
         sawDone = true;
+        onDone?.({ doneReason: parsed.done_reason || 'stop' });
         break;
       }
     }

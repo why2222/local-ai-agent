@@ -33,6 +33,8 @@
 
 2026-11-21 流式体验优化：等待三点动画、文档进度单行显示（修复竖排 bug 与重复指示）、阶段文案区分、滚动仅在底部附近自动跟随（上滑显示"回到底部"）、Markdown 渲染增强（`public/markdown.mjs`：标题/表格/链接/引用/分隔线，链接协议白名单）。**重要：文档摘要每批与汇总限制 `num_predict=400`**——实测 2B 模型在含表格提示下会无限生成（llama-server 高 CPU 20+ 分钟），`streamChat` 新增 numPredict 参数防失控。见 `docs/adr/0007-streaming-ui-markdown.md`。
 
+2026-11-21 流式体验优化：等待三点动画、文档进度单行显示（修复竖排 bug 与重复指示）、阶段文案区分、滚动仅在底部附近自动跟随（上滑显示"回到底部"）、Markdown 渲染增强（`public/markdown.mjs`：标题/表格/链接/引用/分隔线，链接协议白名单）。**生成稳定性：摘要每批 `num_predict=400` 仅作单次保险，`src/generate.mjs` 在 `done_reason='length'` 时自动续写（最多 3 次），末尾同单元重复 ≥3 次判定死循环立即中止**——解决 2B 模型偶发无限生成与正常长回复被截断两类问题。见 `docs/adr/0007-streaming-ui-markdown.md`。
+
 服务当前在运行：应用 `0.0.0.0:43210`，Ollama `127.0.0.1:11434`。**2026-11-21 已按用户确认启用远程访问模式**：`LOCAL_AI_ALLOW_LAN=1` + `LOCAL_AI_REMOTE_HOST=remote-access-18266.zconnect.cn` + `LOCAL_AI_REMOTE_TOKEN`（令牌仅存于进程环境变量，不写入本文档与仓库）。启动时全链路已验证：回环/局域网 200、远程无令牌或错令牌 401、正确令牌 API 200、页面 302+安全 Cookie、Cookie 访问 200、其他域名 403。关闭方式：去掉这两个 REMOTE 环境变量重启。
 
 ## 关键决策
@@ -62,7 +64,7 @@
 
 ## 验证与测试
 
-- `npm test`：121 个用例，Node 内置 `node:test`，零依赖，约 1 秒。覆盖前端 `createId`、config/Host 校验、storage 原子写入、chat-store（含损坏隔离）、image-store 签名校验、ollama 请求构造与流式/中止/输出上限、HTTP API 集成（路径穿越、生成锁、停止生成）、模型目录与推荐分档（含 Apple Silicon）、模型列表/切换/下载 API（进度、错误、下载锁）、远程访问模式（令牌、Cookie、Origin、配置校验）、在线目录解析/缓存/合并与纯文本图片拦截、面板视图过滤分组、文档提取（txt/pdf/docx/xlsx）与分批摘要 API、Markdown 解析。
+- `npm test`：126 个用例，Node 内置 `node:test`，零依赖，约 1 秒。覆盖前端 `createId`、config/Host 校验、storage 原子写入、chat-store（含损坏隔离）、image-store 签名校验、ollama 请求构造与流式/中止/输出上限/结束原因、HTTP API 集成（路径穿越、生成锁、停止生成）、模型目录与推荐分档（含 Apple Silicon）、模型列表/切换/下载 API（进度、错误、下载锁）、远程访问模式（令牌、Cookie、Origin、配置校验）、在线目录解析/缓存/合并与纯文本图片拦截、面板视图过滤分组、文档提取（txt/pdf/docx/xlsx）与分批摘要 API、Markdown 解析、截断续写与重复循环检测。
 - 测试一律用进程内假 Ollama + 临时数据目录，不加载真实模型、不读写真实 `data/`；真实模型验证保持手工冒烟。
 - `npm run check`：全部 src 与 public 模块（含 `public/id.mjs`）的 `node --check` 语法检查。
 - 前端 DOM 交互无自动化测试，仍靠浏览器手工回归。
