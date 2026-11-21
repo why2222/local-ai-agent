@@ -17,6 +17,9 @@ mkdir -p "$OLLAMA_MODELS" "$ROOT_DIR/data/logs"
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
   OLLAMA_BIN="$(command -v ollama || true)"
+  if [[ -z "$OLLAMA_BIN" && -x "$ROOT_DIR/runtime/ollama/Ollama.app/Contents/Resources/ollama" ]]; then
+    OLLAMA_BIN="$ROOT_DIR/runtime/ollama/Ollama.app/Contents/Resources/ollama"
+  fi
   if [[ -z "$OLLAMA_BIN" && -x /Applications/Ollama.app/Contents/Resources/ollama ]]; then
     OLLAMA_BIN="/Applications/Ollama.app/Contents/Resources/ollama"
   fi

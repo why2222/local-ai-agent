@@ -45,6 +45,34 @@ npm start
 - 点击“添加文档”选择文本、代码、PDF、DOCX、XLSX 文件（单文件 ≤100 MiB），选择后**不会自动发送**：可先输入处理要求（如“提取所有颜色值”，不输入则默认生成摘要），点击发送后开始分批处理，逐批生成再汇总，显示批次进度、可停止。原文保存在本机 `data/documents/`，可点击消息中的“查看原文”。PDF 文本提取依赖系统 `pdftotext`（Linux 安装 `poppler-utils`，macOS 运行 `brew install poppler`）；扫描件无文本时请改用图片 OCR。注意：大文档按每 1500 字一批送入本机模型，批数很多时耗时会很长（本机每批约需几秒到十几秒），可随时停止。
 - 需要更多模型时，点击面板里的“在线获取更多模型”，二次确认后才会连接 ollama.com 拉取官方目录（暴露出口 IP 与浏览行为，不上传任何聊天数据），成功后缓存在本地供离线浏览，失败自动回退内置目录。不推荐的模型下载前会要求再次确认。
 
+## 分发与一键安装（macOS）
+
+给非技术用户分发时，用 GitHub Releases 的 zip 包，用户无需安装任何开发环境。
+
+**发布（维护者）**：
+
+```bash
+bash scripts/pack-release.sh
+gh release create v1.0.0 runtime/release/local-ai.zip --generate-notes
+```
+
+`scripts/launcher/lib.sh` 的 `RELEASE_REPO` 默认为 `your-name/local-ai-assistant`，请改成你的 GitHub 仓库（也可用 `LOCAL_AI_RELEASE_REPO` 环境变量覆盖）。
+
+**用户安装**：
+
+1. 下载 `local-ai.zip` 并解压。
+2. 双击 `Install.command`（未签名，首次需右键 → 打开）。脚本会自动安装便携版 Node.js、Ollama 和模型（首次需下载约 2-4 GB，无需管理员密码）。
+3. 完成后浏览器自动打开应用。
+
+**日常使用与更新**：
+
+- `Start.command`：启动服务并打开浏览器。
+- `Update.command`：从 GitHub Releases 拉取最新版本并更新，保留聊天数据、模型和本机配置。
+
+数据目录（`data/`）、模型、Node 与 Ollama 运行时（`runtime/`）都在项目目录内，更新不会覆盖。
+
+Linux 仍用 `npm run setup && npm start`。
+
 ## 本地数据
 
 ```text

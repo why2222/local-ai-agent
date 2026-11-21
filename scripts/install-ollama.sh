@@ -12,6 +12,10 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     ollama --version
     exit 0
   fi
+  if [[ -x "$ROOT_DIR/runtime/ollama/Ollama.app/Contents/Resources/ollama" ]]; then
+    "$ROOT_DIR/runtime/ollama/Ollama.app/Contents/Resources/ollama" --version
+    exit 0
+  fi
   if [[ -x /Applications/Ollama.app/Contents/Resources/ollama ]]; then
     /Applications/Ollama.app/Contents/Resources/ollama --version
     exit 0

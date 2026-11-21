@@ -41,6 +41,8 @@
 
 2026-11-22 **后台生成模式**：修复"回复中刷新页面提示已停止生成"——生成与连接解耦（断连不中止），开始即保存 streaming 消息 + 每秒增量持久化，新增 `POST /api/chats/:id/stop` 显式停止接口，前端刷新后轮询恢复进度直到完成。见 `docs/adr/0010-background-generation.md`。
 
+2026-11-22 分发方案（GitHub Releases zip + 一键启动器）：`scripts/launcher/` 提供 Install/Start/Update.command（便携 Node 免 sudo、Ollama.app 项目内安装、模型下载、启动打开浏览器、保留数据的更新），`scripts/pack-release.sh` 生成 local-ai.zip，`gh release create` 发布。`RELEASE_REPO` 需改为维护者仓库。**macOS 双击流程未在 M2 真机验证**，首次在 M2 需实测。见 `docs/adr/0011-distribution-launcher.md`。
+
 服务当前在运行：应用 `0.0.0.0:43210`，Ollama `127.0.0.1:11434`。**2026-11-21 已按用户确认启用远程访问模式**：`LOCAL_AI_ALLOW_LAN=1` + `LOCAL_AI_REMOTE_HOST=remote-access-18266.zconnect.cn` + `LOCAL_AI_REMOTE_TOKEN`（令牌仅存于进程环境变量，不写入本文档与仓库）。启动时全链路已验证：回环/局域网 200、远程无令牌或错令牌 401、正确令牌 API 200、页面 302+安全 Cookie、Cookie 访问 200、其他域名 403。关闭方式：去掉这两个 REMOTE 环境变量重启。
 
 ## 关键决策
