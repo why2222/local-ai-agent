@@ -25,7 +25,7 @@
 
 2026-11-21 新增"远程访问模式"（**默认关闭，仅调试**）：诊断确认 zconnect 公网域名被 Host 白名单拒绝属设计行为后，用户明确授权实现。`LOCAL_AI_REMOTE_HOST`（精确域名，小写归一、去 :443）+ `LOCAL_AI_REMOTE_TOKEN`（≥16 位 URL 安全随机串）必须成对设置，缺任一或令牌非法均拒绝启动。登录 `/?token=...` 设置 `HttpOnly;Secure;SameSite=Strict` Cookie 并 302 去令牌；API 接受 `?token=`；Origin 仅允许该域名 https 同源；错误日志只记 pathname 不记 query（防令牌落盘）。本机回环/局域网不需令牌。见 `docs/adr/0003-remote-access-mode.md`（含用户知情同意与备选方案）。**当前生产启动命令未开启此模式**，需要时按 README"远程访问模式"节配置。
 
-服务当前在运行：应用 `0.0.0.0:43210`，Ollama `127.0.0.1:11434`。
+服务当前在运行：应用 `0.0.0.0:43210`，Ollama `127.0.0.1:11434`。**2026-11-21 已按用户确认启用远程访问模式**：`LOCAL_AI_ALLOW_LAN=1` + `LOCAL_AI_REMOTE_HOST=remote-access-18266.zconnect.cn` + `LOCAL_AI_REMOTE_TOKEN`（令牌仅存于进程环境变量，不写入本文档与仓库）。启动时全链路已验证：回环/局域网 200、远程无令牌或错令牌 401、正确令牌 API 200、页面 302+安全 Cookie、Cookie 访问 200、其他域名 403。关闭方式：去掉这两个 REMOTE 环境变量重启。
 
 ## 关键决策
 
