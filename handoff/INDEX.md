@@ -29,6 +29,8 @@
 
 2026-11-21 设置面板 UI 改版（用户预览三版设计稿后选 A）：全宽大卡片改为紧凑行列表 + 顶部搜索/筛选 + 在线目录默认折叠（搜索或已下载筛选时自动展开）+ 点击行内联展开详情。过滤分组抽为纯函数 `public/model-view.mjs`（有测试）。修复了展开状态哨兵误用（收起后刷新被重展开）与 ARIA 嵌套按钮问题。随后按用户反馈将弹窗加宽至 880px，滚动条统一为 macOS 风格细圆角半透明样式，并修复弹窗双滚动条问题（外框 `overflow: hidden`，仅内容区滚动）。见 `docs/adr/0005-settings-panel-compact.md`，设计稿在 `runtime/design/`。
 
+2026-11-21 新增文档上传（首版设计预留的文档问答阶段）：支持文本/代码/PDF/DOCX/XLSX（≤1 MiB），选择后自动开始分批摘要（map-reduce，显示批次进度、可停止），原文存 `data/documents/` 可查看。解析：PDF 走系统 `pdftotext`（macOS 需 `brew install poppler`），DOCX/XLSX 手写 zip+XML（零 npm 依赖）；`buildSummaryPrompt` 按批次数截断控制 reduce 输入不超 numCtx；zip 解压 8 MiB 上限、XLSX 自闭合标签剔除、Office 原文按 MIME 返回。新增 `src/document-extract.mjs`、`src/document-store.mjs` 及 `POST documents`、`POST documents/:id/summarize`、`GET documents/:id` API。见 `docs/adr/0006-document-upload.md`。
+
 服务当前在运行：应用 `0.0.0.0:43210`，Ollama `127.0.0.1:11434`。**2026-11-21 已按用户确认启用远程访问模式**：`LOCAL_AI_ALLOW_LAN=1` + `LOCAL_AI_REMOTE_HOST=remote-access-18266.zconnect.cn` + `LOCAL_AI_REMOTE_TOKEN`（令牌仅存于进程环境变量，不写入本文档与仓库）。启动时全链路已验证：回环/局域网 200、远程无令牌或错令牌 401、正确令牌 API 200、页面 302+安全 Cookie、Cookie 访问 200、其他域名 403。关闭方式：去掉这两个 REMOTE 环境变量重启。
 
 ## 关键决策
@@ -58,7 +60,7 @@
 
 ## 验证与测试
 
-- `npm test`：95 个用例，Node 内置 `node:test`，零依赖，约 1 秒。覆盖前端 `createId`、config/Host 校验、storage 原子写入、chat-store（含损坏隔离）、image-store 签名校验、ollama 请求构造与流式/中止、HTTP API 集成（路径穿越、生成锁、停止生成）、模型目录与推荐分档（含 Apple Silicon）、模型列表/切换/下载 API（进度、错误、下载锁）、远程访问模式（令牌、Cookie、Origin、配置校验）、在线目录解析/缓存/合并与纯文本图片拦截、面板视图过滤分组。
+- `npm test`：113 个用例，Node 内置 `node:test`，零依赖，约 1 秒。覆盖前端 `createId`、config/Host 校验、storage 原子写入、chat-store（含损坏隔离）、image-store 签名校验、ollama 请求构造与流式/中止、HTTP API 集成（路径穿越、生成锁、停止生成）、模型目录与推荐分档（含 Apple Silicon）、模型列表/切换/下载 API（进度、错误、下载锁）、远程访问模式（令牌、Cookie、Origin、配置校验）、在线目录解析/缓存/合并与纯文本图片拦截、面板视图过滤分组、文档提取（txt/pdf/docx/xlsx）与分批摘要 API。
 - 测试一律用进程内假 Ollama + 临时数据目录，不加载真实模型、不读写真实 `data/`；真实模型验证保持手工冒烟。
 - `npm run check`：全部 src 与 public 模块（含 `public/id.mjs`）的 `node --check` 语法检查。
 - 前端 DOM 交互无自动化测试，仍靠浏览器手工回归。

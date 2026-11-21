@@ -16,6 +16,11 @@ const elements = {
   attach: $('#attach-button'),
   imageInput: $('#image-input'),
   selectedImage: $('#selected-image'),
+  selectedDocument: $('#selected-document'),
+  selectedDocumentName: $('#selected-document-name'),
+  removeDocument: $('#remove-document'),
+  docAttach: $('#doc-attach-button'),
+  documentInput: $('#document-input'),
   selectedImagePreview: $('#selected-image-preview'),
   selectedImageName: $('#selected-image-name'),
   removeImage: $('#remove-image'),
@@ -35,6 +40,7 @@ const state = {
   controller: null,
   selectedFile: null,
   selectedFileUrl: null,
+  selectedDocument: null,
   currentVision: true,
 };
 
@@ -217,6 +223,7 @@ function renderMessage(message) {
     bubble.append(text);
     const imageId = imageIdFrom(message);
     if (imageId) bubble.append(createMessageImage(imageId));
+    if (message.documentId) bubble.append(createDocumentLink(message.documentName || '查看原文', message.documentId));
     article.append(bubble);
     return article;
   }
@@ -228,6 +235,7 @@ function renderMessage(message) {
   const body = document.createElement('div');
   body.className = 'message-body';
   body.append(renderFormattedText(message.content || message.text || '', message.status === 'streaming'));
+  if (message.documentId) body.append(createDocumentLink('查看原文', message.documentId));
   if (message.status && message.status !== 'complete' && message.status !== 'completed' && message.status !== 'streaming') {
     const status = document.createElement('div');
     status.className = `message-status ${message.status === 'error' ? 'error' : ''}`;
@@ -366,12 +374,43 @@ function setGenerating(generating) {
   elements.newChat.disabled = generating;
   elements.input.readOnly = generating;
   elements.attach.disabled = generating;
+  elements.docAttach.disabled = generating;
   updateSendState();
   renderChatList();
 }
 
 function updateSendState() {
-  elements.send.disabled = !state.generating && !elements.input.value.trim() && !state.selectedFile;
+  elements.send.disabled = !state.generating && !elements.input.value.trim() && !state.selectedFile && !state.selectedDocument;
+}
+
+const DOCUMENT_EXTENSIONS = ['.txt', '.md', '.json', '.csv', '.log', '.pdf', '.docx', '.xlsx', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx', '.py', '.java', '.go', '.rs', '.c', '.cpp', '.h', '.cs', '.html', '.css', '.sh', '.yml', '.yaml', '.toml', '.xml', '.sql'];
+
+function clearSelectedDocument() {
+  state.selectedDocument = null;
+  elements.selectedDocument.hidden = true;
+  elements.documentInput.value = '';
+  updateSendState();
+}
+
+function selectDocument(file) {
+  showError();
+  if (!file) return;
+  const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+  if (!DOCUMENT_EXTENSIONS.includes(ext)) {
+    showError('仅支持文本、代码、PDF、DOCX、XLSX 文档。');
+    return;
+  }
+  if (file.size > 1024 * 1024) {
+    showError('文档不能超过 1 MiB。');
+    return;
+  }
+  clearSelectedFile();
+  clearSelectedDocument();
+  state.selectedDocument = file;
+  elements.selectedDocumentName.textContent = `${file.name}（${(file.size / 1024).toFixed(1)} KB）`;
+  elements.selectedDocument.hidden = false;
+  updateSendState();
+  void sendDocument();
 }
 
 function clearSelectedFile() {
@@ -396,6 +435,7 @@ function selectFile(file) {
     return;
   }
   clearSelectedFile();
+  clearSelectedDocument();
   state.selectedFile = file;
   state.selectedFileUrl = URL.createObjectURL(file);
   elements.selectedImagePreview.src = state.selectedFileUrl;
@@ -417,6 +457,11 @@ async function uploadImage(chatId, file) {
 async function sendMessage(retry = null) {
   if (state.generating) {
     state.controller?.abort();
+    return;
+  }
+
+  if (!retry && state.selectedDocument) {
+    await sendDocument();
     return;
   }
 
@@ -498,6 +543,132 @@ async function sendMessage(retry = null) {
   }
 }
 
+async function sendDocument() {
+  if (state.generating) {
+    state.controller?.abort();
+    return;
+  }
+  const file = state.selectedDocument;
+  if (!file) return;
+  if (!state.currentChat) await createChat({ focus: false });
+  const chatId = state.currentChat.id;
+  setGenerating(true);
+
+  const userMessage = {
+    id: createId(), role: 'user',
+    content: `上传文档《${file.name}》，生成摘要`,
+    status: 'complete', documentName: file.name,
+  };
+  const assistantMessage = {
+    id: createId(), role: 'assistant', content: '', status: 'streaming',
+    progress: '准备上传文档', documentName: file.name,
+  };
+  state.currentChat.messages ||= [];
+  state.currentChat.messages.push(userMessage, assistantMessage);
+  renderChat();
+  clearSelectedDocument();
+  state.controller = new AbortController();
+
+  try {
+    const { document: doc } = await requestJson(`/api/chats/${encodeURIComponent(chatId)}/documents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream', 'X-Document-Name': encodeURIComponent(file.name) },
+      body: file,
+    });
+    userMessage.documentId = doc.id;
+    assistantMessage.documentId = doc.id;
+    const response = await request(`/api/chats/${encodeURIComponent(chatId)}/documents/${encodeURIComponent(doc.id)}/summarize`, {
+      method: 'POST',
+      signal: state.controller.signal,
+    });
+    await consumeDocumentStream(response, assistantMessage);
+    assistantMessage.status = 'complete';
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      assistantMessage.status = 'stopped';
+    } else {
+      assistantMessage.status = 'error';
+      assistantMessage.error = error.message;
+      showError(error.message);
+    }
+  } finally {
+    setGenerating(false);
+    state.controller = null;
+    if (assistantMessage.status === 'error' || assistantMessage.status === 'stopped') {
+      renderChat();
+    } else {
+      try {
+        state.currentChat = chatFrom(await requestJson(`/api/chats/${encodeURIComponent(chatId)}`));
+      } catch {}
+      renderChat();
+    }
+    try { await loadChats(); } catch {}
+    elements.input.focus();
+  }
+}
+
+async function consumeDocumentStream(response, assistantMessage) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  const article = [...elements.messages.querySelectorAll('.message.assistant')].at(-1);
+  const body = article?.querySelector('.message-body');
+
+  const updateProgress = () => {
+    if (!article) return;
+    let progress = article.querySelector('.document-progress');
+    if (!progress) {
+      progress = document.createElement('div');
+      progress.className = 'document-progress';
+      article.append(progress);
+    }
+    progress.textContent = assistantMessage.progress || '';
+    if (body) body.replaceChildren(renderFormattedText(assistantMessage.content, true));
+    scrollToBottom(false);
+  };
+
+  const applyEvent = (event) => {
+    if (event.type === 'batch') {
+      assistantMessage.progress = `正在总结第 ${event.index}/${event.total} 批`;
+      updateProgress();
+    } else if (event.type === 'final-start') {
+      assistantMessage.progress = '正在汇总摘要';
+      updateProgress();
+    } else if (event.type === 'delta') {
+      assistantMessage.content += event.text || '';
+      updateProgress();
+    } else if (event.type === 'done') {
+      assistantMessage.status = 'complete';
+      if (event.message?.text) assistantMessage.content = event.message.text;
+      if (event.message?.documentId) assistantMessage.documentId = event.message.documentId;
+    } else if (event.type === 'error') {
+      throw new Error(event.message || '文档摘要失败');
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+    const lines = buffer.split('\n');
+    buffer = done ? '' : lines.pop();
+    for (const line of lines) {
+      if (line.trim()) applyEvent(JSON.parse(line));
+    }
+    if (done) break;
+  }
+  if (buffer.trim()) applyEvent(JSON.parse(buffer));
+}
+
+function createDocumentLink(text, docId) {
+  const link = document.createElement('a');
+  link.className = 'document-link';
+  link.href = `/api/chats/${encodeURIComponent(state.currentChat.id)}/documents/${encodeURIComponent(docId)}`;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.append(icon('doc'), document.createTextNode(text));
+  return link;
+}
+
 async function consumeStream(response, assistantMessage) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -574,6 +745,9 @@ elements.input.addEventListener('keydown', (event) => {
 });
 elements.newChat.addEventListener('click', () => createChat().catch((error) => showError(error.message)));
 elements.attach.addEventListener('click', () => elements.imageInput.click());
+elements.docAttach.addEventListener('click', () => elements.documentInput.click());
+elements.documentInput.addEventListener('change', () => selectDocument(elements.documentInput.files[0]));
+elements.removeDocument.addEventListener('click', clearSelectedDocument);
 elements.imageInput.addEventListener('change', () => selectFile(elements.imageInput.files[0]));
 elements.removeImage.addEventListener('click', clearSelectedFile);
 elements.statusButton.addEventListener('click', checkHealth);

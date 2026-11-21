@@ -6,6 +6,8 @@ import { CONFIG, isLoopbackHost, saveSelectedModel } from './config.mjs';
 import { recommendModel, sortModelsForDisplay } from './model-catalog.mjs';
 import { getAllModels, getCacheInfo, isCatalogModel, refreshRemoteModels } from './model-library.mjs';
 import { getDeviceInfo } from './device.mjs';
+import { DOCUMENT_EXTENSIONS, DocumentError, buildSummaryPrompt } from './document-extract.mjs';
+import { saveDocument, readDocumentMeta, readDocumentBatches, readDocumentRaw } from './document-store.mjs';
 import { isRemoteHost, checkRemoteAccess } from './remote-access.mjs';
 import {
   createEmptyChat, listChats, getChat, saveChat, deleteChat, summarize,
@@ -327,6 +329,189 @@ async function handleGetImage(res, chatId, imageId) {
   res.end(image.buffer);
 }
 
+async function handleUploadDocument(req, res, chatId) {
+  const chat = await getChat(chatId);
+  if (!chat) return sendError(res, 404, 'chat-not-found', '会话不存在');
+
+  let name;
+  try {
+    name = decodeURIComponent(String(req.headers['x-document-name'] || ''));
+  } catch {
+    return sendError(res, 400, 'bad-name', '文件名编码不合法');
+  }
+  const ext = path.extname(name).toLowerCase();
+  if (!name) return sendError(res, 400, 'bad-name', '缺少文件名');
+  if (!DOCUMENT_EXTENSIONS.includes(ext)) {
+    return sendError(res, 415, 'unsupported-type', '仅支持文本、代码、PDF、DOCX、XLSX 文档');
+  }
+
+  let buffer;
+  try {
+    buffer = await readBody(req, 1024 * 1024);
+  } catch (err) {
+    if (err.code === 'payload-too-large') {
+      return sendError(res, 413, 'too-large', '文档超过 1 MiB 大小限制');
+    }
+    throw err;
+  }
+
+  try {
+    const document = await saveDocument(chatId, buffer, ext, name);
+    sendJson(res, 201, { document });
+  } catch (err) {
+    if (err instanceof DocumentError) {
+      const status = err.code === 'unsupported-type' ? 415 : 400;
+      return sendError(res, status, err.code, err.message);
+    }
+    throw err;
+  }
+}
+
+const DOCUMENT_MIME_TYPES = {
+  '.pdf': 'application/pdf',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+};
+
+async function handleGetDocument(res, chatId, docId) {
+  if (!UUID_RE.test(docId)) return sendError(res, 404, 'document-not-found', '文档不存在');
+  const chat = await getChat(chatId);
+  if (!chat) return sendError(res, 404, 'chat-not-found', '会话不存在');
+  const raw = await readDocumentRaw(chatId, docId);
+  if (!raw) return sendError(res, 404, 'document-not-found', '文档不存在');
+  res.writeHead(200, {
+    ...SECURITY_HEADERS,
+    'Content-Type': DOCUMENT_MIME_TYPES[raw.ext] || 'text/plain; charset=utf-8',
+    'Content-Length': raw.buffer.length,
+    'Cache-Control': 'private, max-age=3600',
+  });
+  res.end(raw.buffer);
+}
+
+async function handleSummarizeDocument(req, res, chatId, docId) {
+  const chat = await getChat(chatId);
+  if (!chat) return sendError(res, 404, 'chat-not-found', '会话不存在');
+  if (!UUID_RE.test(docId)) return sendError(res, 404, 'document-not-found', '文档不存在');
+
+  let meta;
+  let batches;
+  try {
+    meta = await readDocumentMeta(chatId, docId);
+    batches = await readDocumentBatches(chatId, docId);
+  } catch {
+    return sendError(res, 404, 'document-not-found', '文档不存在');
+  }
+
+  if (!acquireLock()) {
+    return sendError(res, 409, 'generation-busy', '已有生成正在进行，请先停止或稍后再试');
+  }
+
+  const userMessage = {
+    id: randomUUID(),
+    role: 'user',
+    text: `上传文档《${meta.name}》（${meta.textChars} 字），生成摘要`,
+    createdAt: new Date().toISOString(),
+    status: 'complete',
+    documentId: docId,
+    documentName: meta.name,
+    documentExt: meta.ext,
+  };
+  chat.messages.push(userMessage);
+  if (!chat.title) chat.title = makeTitle(`文档：${meta.name}`);
+  try {
+    await saveChat(chat);
+  } catch (err) {
+    releaseLock();
+    chat.messages.pop();
+    return sendError(res, 500, 'storage-error', `会话保存失败: ${err.message}`);
+  }
+
+  res.writeHead(200, {
+    ...SECURITY_HEADERS,
+    'Content-Type': 'application/x-ndjson; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'X-Accel-Buffering': 'no',
+  });
+  const abort = new AbortController();
+  const onClose = () => { if (!res.writableEnded) abort.abort(new Error('client-abort')); };
+  res.on('close', onClose);
+
+  let fullText = '';
+  let settled = false;
+  const finish = async (status) => {
+    if (settled) return;
+    settled = true;
+    const assistantMessage = {
+      id: randomUUID(),
+      role: 'assistant',
+      text: fullText,
+      createdAt: new Date().toISOString(),
+      status,
+      documentId: docId,
+    };
+    try {
+      chat.messages.push(assistantMessage);
+      await saveChat(chat);
+    } catch (err) {
+      writeNdjson(res, {
+        type: 'error', code: 'storage-error',
+        message: `摘要已生成但保存失败: ${err.message}`, partial: true,
+      });
+    }
+    releaseLock();
+  };
+
+  try {
+    const partials = [];
+    for (let i = 0; i < batches.length; i += 1) {
+      writeNdjson(res, { type: 'batch', index: i + 1, total: batches.length });
+      let partial = '';
+      for await (const delta of streamChat({
+        messages: [{ role: 'user', content: `请用中文简洁总结以下文档片段（第${i + 1}/${batches.length}批）：\n\n${batches[i]}` }],
+        signal: abort.signal,
+      })) {
+        partial += delta;
+        fullText += delta;
+        if (!writeNdjson(res, { type: 'delta', text: delta, batch: i + 1 })) {
+          abort.abort(new Error('client-gone'));
+          throw new OllamaError('aborted', '客户端已断开');
+        }
+      }
+      partials.push(partial);
+      writeNdjson(res, { type: 'batch-done', index: i + 1 });
+    }
+
+    writeNdjson(res, { type: 'final-start' });
+    const summaryPrompt = buildSummaryPrompt(meta.name, partials);
+    for await (const delta of streamChat({
+      messages: [{ role: 'user', content: summaryPrompt }],
+      signal: abort.signal,
+    })) {
+      fullText += delta;
+      if (!writeNdjson(res, { type: 'delta', text: delta, final: true })) {
+        abort.abort(new Error('client-gone'));
+        throw new OllamaError('aborted', '客户端已断开');
+      }
+    }
+    await finish('complete');
+    writeNdjson(res, { type: 'done', message: chat.messages[chat.messages.length - 1] });
+  } catch (err) {
+    const aborted = abort.signal.aborted || (err instanceof OllamaError && err.code === 'aborted');
+    await finish(aborted ? 'stopped' : 'error');
+    if (!res.destroyed && !res.writableEnded) {
+      writeNdjson(res, {
+        type: 'error',
+        code: aborted ? 'stopped' : err.code || 'generation-error',
+        message: aborted ? '已停止，部分摘要已保存' : err.message,
+        partial: aborted,
+      });
+    }
+  } finally {
+    res.off('close', onClose);
+    if (!res.writableEnded && !res.destroyed) res.end();
+  }
+}
+
 async function handlePostMessage(req, res, chatId) {
   const chat = await getChat(chatId);
   if (!chat) return sendError(res, 404, 'chat-not-found', '会话不存在');
@@ -557,6 +742,24 @@ async function route(req, res) {
   if (imageMatch) {
     if (method !== 'GET') return sendError(res, 405, 'method-not-allowed', '不支持的方法');
     return handleGetImage(res, imageMatch[1].toLowerCase(), imageMatch[2].toLowerCase());
+  }
+
+  const documentsMatch = pathname.match(/^\/api\/chats\/([0-9a-fA-F-]{36})\/documents$/);
+  if (documentsMatch) {
+    if (method !== 'POST') return sendError(res, 405, 'method-not-allowed', '不支持的方法');
+    return handleUploadDocument(req, res, documentsMatch[1].toLowerCase());
+  }
+
+  const summarizeMatch = pathname.match(/^\/api\/chats\/([0-9a-fA-F-]{36})\/documents\/([0-9a-fA-F-]{36})\/summarize$/);
+  if (summarizeMatch) {
+    if (method !== 'POST') return sendError(res, 405, 'method-not-allowed', '不支持的方法');
+    return handleSummarizeDocument(req, res, summarizeMatch[1].toLowerCase(), summarizeMatch[2].toLowerCase());
+  }
+
+  const documentMatch = pathname.match(/^\/api\/chats\/([0-9a-fA-F-]{36})\/documents\/([0-9a-fA-F-]{36})$/);
+  if (documentMatch) {
+    if (method !== 'GET') return sendError(res, 405, 'method-not-allowed', '不支持的方法');
+    return handleGetDocument(res, documentMatch[1].toLowerCase(), documentMatch[2].toLowerCase());
   }
 
   if (pathname.startsWith('/api/')) {
