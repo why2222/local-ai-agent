@@ -678,3 +678,6 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 .history-item { display: flex; align-items: center; gap: 8px; }
 .history-item .chat-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .history-item .chat-time { flex: 0 0 auto; color: var(--muted); font-size: 10px; }
+.model-picker-wrap { margin-left: auto; }
+.model-picker .model-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: 0 0 auto; }
+.sidebar-bottom .model-status-row { width: 100%; }

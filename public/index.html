@@ -40,8 +40,7 @@
           <button class="model-status" id="status-button" type="button" title="重新检查本地模型">
             <span class="status-dot" id="status-dot" aria-hidden="true"></span>
             <span id="status-text">正在检查模型</span>
-          </button>
-          <div class="settings-menu-wrap">
+          </button>          <div class="settings-menu-wrap">
             <button class="icon-button small" id="settings-button" type="button" aria-label="设置" title="设置" aria-expanded="false" aria-controls="settings-menu">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#settings"></use></svg>
             </button>
@@ -57,7 +56,7 @@
             </div>
           </div>
         </div>
-        <div class="model-name" id="model-name">Qwen3-VL · 仅在本机运行</div>
+        <div class="model-name" id="model-name" hidden>Qwen3-VL · 仅在本机运行</div>
       </div>
     </aside>
     <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" aria-label="关闭会话导航" tabindex="-1"></button>
@@ -115,6 +114,7 @@
               <input id="document-input" type="file" hidden accept=".txt,.md,.json,.csv,.log,.pdf,.docx,.xlsx,.js,.mjs,.cjs,.ts,.tsx,.jsx,.py,.java,.go,.rs,.c,.cpp,.h,.cs,.html,.css,.sh,.yml,.yaml,.toml,.xml,.sql">
               <div class="model-picker-wrap">
                 <button class="model-picker" id="model-picker" type="button" aria-expanded="false" aria-controls="model-picker-menu">
+                  <span class="model-dot" aria-hidden="true"></span>
                   <span id="model-picker-name">Qwen3-VL · 2B</span>
                   <svg class="icon chev" aria-hidden="true"><use href="/icons.svg#arrow-up"></use></svg>
                 </button>
