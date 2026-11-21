@@ -440,6 +440,22 @@ async function handleSummarizeDocument(req, res, chatId, docId) {
     return sendError(res, 500, 'storage-error', `会话保存失败: ${err.message}`);
   }
 
+  const assistantMessage = {
+    id: randomUUID(),
+    role: 'assistant',
+    text: '',
+    createdAt: new Date().toISOString(),
+    status: 'streaming',
+    documentId: docId,
+  };
+  chat.messages.push(assistantMessage);
+  try {
+    await saveChat(chat);
+  } catch (err) {
+    releaseLock();
+    return sendError(res, 500, 'storage-error', `会话保存失败: ${err.message}`);
+  }
+
   res.writeHead(200, {
     ...SECURITY_HEADERS,
     'Content-Type': 'application/x-ndjson; charset=utf-8',
@@ -447,24 +463,21 @@ async function handleSummarizeDocument(req, res, chatId, docId) {
     'X-Accel-Buffering': 'no',
   });
   const abort = new AbortController();
-  const onClose = () => { if (!res.writableEnded) abort.abort(new Error('client-abort')); };
-  res.on('close', onClose);
+  activeGenerations.set(chatId, abort);
 
   let fullText = '';
   let settled = false;
+  const saveTimer = setInterval(() => {
+    if (assistantMessage.text) saveChat(chat).catch(() => {});
+  }, 1000);
   const finish = async (status) => {
     if (settled) return;
     settled = true;
-    const assistantMessage = {
-      id: randomUUID(),
-      role: 'assistant',
-      text: fullText,
-      createdAt: new Date().toISOString(),
-      status,
-      documentId: docId,
-    };
+    clearInterval(saveTimer);
+    activeGenerations.delete(chatId);
+    assistantMessage.text = fullText;
+    assistantMessage.status = status;
     try {
-      chat.messages.push(assistantMessage);
       await saveChat(chat);
     } catch (err) {
       writeNdjson(res, {
@@ -488,10 +501,8 @@ async function handleSummarizeDocument(req, res, chatId, docId) {
         numPredict: 400,
         onDelta: (delta) => {
           fullText += delta;
-          if (!writeNdjson(res, { type: 'delta', text: delta, batch: i + 1 })) {
-            abort.abort(new Error('client-gone'));
-            throw new OllamaError('aborted', '客户端已断开');
-          }
+          assistantMessage.text = fullText;
+          writeNdjson(res, { type: 'delta', text: delta, batch: i + 1 });
         },
       });
       partials.push(result.text);
@@ -506,14 +517,12 @@ async function handleSummarizeDocument(req, res, chatId, docId) {
       numPredict: 400,
       onDelta: (delta) => {
         fullText += delta;
-        if (!writeNdjson(res, { type: 'delta', text: delta, final: true })) {
-          abort.abort(new Error('client-gone'));
-          throw new OllamaError('aborted', '客户端已断开');
-        }
+        assistantMessage.text = fullText;
+        writeNdjson(res, { type: 'delta', text: delta, final: true });
       },
     });
     await finish('complete');
-    writeNdjson(res, { type: 'done', message: chat.messages[chat.messages.length - 1] });
+    writeNdjson(res, { type: 'done', message: assistantMessage });
   } catch (err) {
     const aborted = abort.signal.aborted || (err instanceof OllamaError && err.code === 'aborted');
     await finish(aborted ? 'stopped' : 'error');
@@ -526,9 +535,18 @@ async function handleSummarizeDocument(req, res, chatId, docId) {
       });
     }
   } finally {
-    res.off('close', onClose);
     if (!res.writableEnded && !res.destroyed) res.end();
   }
+}
+
+// 活跃生成：后台继续，刷新/断开页面不中止；仅显式停止接口可中止。
+const activeGenerations = new Map();
+
+async function handleStopGeneration(res, chatId) {
+  const abort = activeGenerations.get(chatId);
+  if (!abort) return sendError(res, 409, 'not-generating', '该会话没有正在进行的生成');
+  abort.abort(new Error('user-stop'));
+  sendJson(res, 200, { ok: true });
 }
 
 async function handlePostMessage(req, res, chatId) {
@@ -594,6 +612,21 @@ async function handlePostMessage(req, res, chatId) {
     return sendError(res, status, err.code, err.message);
   }
 
+  const assistantMessage = {
+    id: randomUUID(),
+    role: 'assistant',
+    text: '',
+    createdAt: new Date().toISOString(),
+    status: 'streaming',
+  };
+  chat.messages.push(assistantMessage);
+  try {
+    await saveChat(chat);
+  } catch (err) {
+    releaseLock();
+    return sendError(res, 500, 'storage-error', `会话保存失败: ${err.message}`);
+  }
+
   res.writeHead(200, {
     ...SECURITY_HEADERS,
     'Content-Type': 'application/x-ndjson; charset=utf-8',
@@ -602,27 +635,24 @@ async function handlePostMessage(req, res, chatId) {
   });
 
   const abort = new AbortController();
+  activeGenerations.set(chatId, abort);
   const idleTimer = setTimeout(() => abort.abort(new Error('idle-timeout')), GENERATION_IDLE_TIMEOUT_MS);
-  const onClose = () => { if (!res.writableEnded) abort.abort(new Error('client-abort')); };
-  res.on('close', onClose);
 
   let fullText = '';
   let settled = false;
+  const saveTimer = setInterval(() => {
+    if (assistantMessage.text) saveChat(chat).catch(() => {});
+  }, 1000);
 
   const finish = async (status) => {
     if (settled) return;
     settled = true;
+    clearInterval(saveTimer);
     clearTimeout(idleTimer);
-    res.off('close', onClose);
-    const assistantMessage = {
-      id: randomUUID(),
-      role: 'assistant',
-      text: fullText,
-      createdAt: new Date().toISOString(),
-      status,
-    };
+    activeGenerations.delete(chatId);
+    assistantMessage.text = fullText;
+    assistantMessage.status = status;
     try {
-      chat.messages.push(assistantMessage);
       await saveChat(chat);
     } catch (err) {
       writeNdjson(res, {
@@ -643,13 +673,12 @@ async function handlePostMessage(req, res, chatId) {
     );
     for await (const delta of streamChat({ messages: ollamaMessages, signal: abort.signal })) {
       fullText += delta;
-      if (!writeNdjson(res, { type: 'delta', text: delta })) {
-        abort.abort(new Error('client-gone'));
-        break;
-      }
+      assistantMessage.text = fullText;
+      // 客户端断开只影响展示，不中止后台生成；增量每秒持久化，刷新可恢复进度。
+      writeNdjson(res, { type: 'delta', text: delta });
     }
     await finish('complete');
-    writeNdjson(res, { type: 'done', message: chat.messages[chat.messages.length - 1] });
+    writeNdjson(res, { type: 'done', message: assistantMessage });
   } catch (err) {
     const aborted = abort.signal.aborted || (err instanceof OllamaError && err.code === 'aborted');
     await finish(aborted ? 'stopped' : 'error');
@@ -743,6 +772,12 @@ async function route(req, res) {
     if (method === 'GET') return handleGetChat(res, id);
     if (method === 'DELETE') return handleDeleteChat(res, id);
     return sendError(res, 405, 'method-not-allowed', '不支持的方法');
+  }
+
+  const stopMatch = pathname.match(/^\/api\/chats\/([0-9a-fA-F-]{36})\/stop$/);
+  if (stopMatch) {
+    if (method !== 'POST') return sendError(res, 405, 'method-not-allowed', '不支持的方法');
+    return handleStopGeneration(res, stopMatch[1].toLowerCase());
   }
 
   const messagesMatch = pathname.match(/^\/api\/chats\/([0-9a-fA-F-]{36})\/messages$/);

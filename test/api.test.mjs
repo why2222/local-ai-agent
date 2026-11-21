@@ -172,7 +172,7 @@ test('模型未下载时返回 409 且用户消息仍被保留', async () => {
   }
 });
 
-test('生成锁：并发生成返回 409，客户端停止后保存 stopped 部分回答', async () => {
+test('后台生成：断连不中止，stop 接口停止保存 stopped 部分回答', async () => {
   fake.state.onChat = (payload, req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
     res.write(JSON.stringify({ message: { content: '部分回答' } }) + '\n');
@@ -202,13 +202,24 @@ test('生成锁：并发生成返回 409，客户端停止后保存 stopped 部�
 
   firstReq.destroy();
 
-  let saved;
+  // 后台生成：断开连接不中止，streaming 状态可见；增量每秒持久化。
+  let saved = JSON.parse((await apiRequest({ path: `/api/chats/${chat.id}` })).text).chat;
+  let assistant = saved.messages.find((m) => m.role === 'assistant');
+  assert.equal(assistant.status, 'streaming');
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  saved = JSON.parse((await apiRequest({ path: `/api/chats/${chat.id}` })).text).chat;
+  assistant = saved.messages.find((m) => m.role === 'assistant');
+  assert.equal(assistant.text, '部分回答');
+
+  // 显式停止接口才中止生成。
+  const stop = await apiRequest({ method: 'POST', path: `/api/chats/${chat.id}/stop` });
+  assert.equal(stop.status, 200);
   for (let i = 0; i < 60; i += 1) {
     saved = JSON.parse((await apiRequest({ path: `/api/chats/${chat.id}` })).text).chat;
-    if (saved.messages.some((m) => m.role === 'assistant')) break;
+    assistant = saved.messages.find((m) => m.role === 'assistant');
+    if (assistant.status !== 'streaming') break;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
-  const assistant = saved.messages.find((m) => m.role === 'assistant');
   assert.equal(assistant.status, 'stopped');
   assert.equal(assistant.text, '部分回答');
 

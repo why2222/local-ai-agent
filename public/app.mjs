@@ -185,6 +185,46 @@ async function createChat({ focus = true } = {}) {
   return chat;
 }
 
+async function stopGeneration() {
+  const chatId = state.currentChat?.id;
+  state.controller?.abort();
+  if (chatId) {
+    try {
+      await requestJson(`/api/chats/${encodeURIComponent(chatId)}/stop`, { method: 'POST' });
+    } catch {
+      // 没有进行中的生成时忽略，本地状态已重置。
+    }
+  }
+}
+
+async function pollGeneration(chatId) {
+  setGenerating(true);
+  try {
+    for (;;) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      if (!state.currentChat || state.currentChat.id !== chatId) break;
+      const fresh = chatFrom(await requestJson(`/api/chats/${encodeURIComponent(chatId)}`));
+      if (state.currentChat.id !== chatId) break;
+      state.currentChat = fresh;
+      renderChat();
+      const last = fresh.messages.at(-1);
+      if (!last || last.status !== 'streaming') break;
+    }
+  } catch {
+    // 网络异常时停止轮询，用户可手动刷新。
+  } finally {
+    setGenerating(false);
+    renderChat();
+  }
+}
+
+function resumeGeneratingIfNeeded() {
+  const last = (state.currentChat?.messages || []).at(-1);
+  if (last?.role === 'assistant' && last.status === 'streaming' && !state.generating) {
+    void pollGeneration(state.currentChat.id);
+  }
+}
+
 async function selectChat(id) {
   if (state.generating) return;
   showError();
@@ -193,6 +233,7 @@ async function selectChat(id) {
   renderChat();
   renderChatList();
   closeSidebar();
+  resumeGeneratingIfNeeded();
 }
 
 async function deleteChat(id) {
@@ -539,7 +580,7 @@ async function uploadImage(chatId, file) {
 
 async function sendMessage(retry = null) {
   if (state.generating) {
-    state.controller?.abort();
+    await stopGeneration();
     return;
   }
 
@@ -628,7 +669,7 @@ async function sendMessage(retry = null) {
 
 async function sendDocument(instruction = '', retryDoc = null) {
   if (state.generating) {
-    state.controller?.abort();
+    await stopGeneration();
     return;
   }
   const file = retryDoc ? null : state.selectedDocument;

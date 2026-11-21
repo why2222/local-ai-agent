@@ -141,10 +141,14 @@ test('停止摘要后保存 stopped 状态', async () => {
   const req = await firstDelta;
   req.destroy();
 
+  // 显式停止接口中止后台摘要。
+  const stop = await apiRequest({ method: 'POST', path: `/api/chats/${chat.id}/stop` });
+  assert.equal(stop.status, 200);
+
   let saved;
   for (let i = 0; i < 60; i += 1) {
     saved = JSON.parse((await apiRequest({ path: `/api/chats/${chat.id}` })).text).chat;
-    if (saved.messages.some((m) => m.role === 'assistant')) break;
+    if (saved.messages.some((m) => m.role === 'assistant' && m.status !== 'streaming')) break;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   const assistant = saved.messages.find((m) => m.role === 'assistant');
