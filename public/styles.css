@@ -19,6 +19,19 @@
 }
 
 * { box-sizing: border-box; }
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(128, 118, 159, .35) transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: rgba(128, 118, 159, .28);
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: rgba(128, 118, 159, .45); background-clip: padding-box; }
 html, body { height: 100%; }
 body {
   margin: 0;
@@ -372,7 +385,7 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 .model-status-row .icon-button { flex: 0 0 auto; }
 
 .settings-dialog {
-  width: min(640px, 94vw);
+  width: min(880px, 92vw);
   max-height: 86dvh;
   padding: 0;
   border: 1px solid var(--line);
