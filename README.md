@@ -87,6 +87,30 @@ npm run check   # 语法检查
 
 另有 `LOCAL_AI_ALLOW_LAN=1` 可监听 `0.0.0.0` 并放行私网 IPv4 的 Host 头，用于局域网访问；默认仍只监听 `127.0.0.1`。
 
+## 远程访问模式（默认关闭，仅供调试）
+
+通过 zconnect 等反向代理从公网域名访问时，需要显式启用远程访问模式。**未配置时应用行为完全不变**，公网域名一律 403。
+
+启用必须同时设置两个环境变量，缺少任何一个都会拒绝启动（不允许无认证远程访问）：
+
+```bash
+# 生成一个随机令牌（也可以用其他 URL 安全随机串）
+node -e "console.log(require('node:crypto').randomBytes(24).toString('hex'))"
+
+LOCAL_AI_ALLOW_LAN=1 \
+LOCAL_AI_REMOTE_HOST=remote-access-18266.zconnect.cn \
+LOCAL_AI_REMOTE_TOKEN=<上一步生成的令牌> \
+npm start
+```
+
+使用方式：
+
+- 浏览器打开 `https://remote-access-18266.zconnect.cn/?token=<令牌>`：校验通过后设置 `HttpOnly; Secure; SameSite=Strict` Cookie 并跳转到无令牌地址，之后凭 Cookie 访问，无需再带令牌。
+- API/脚本可用 `?token=<令牌>` 参数（如 `curl 'https://<域名>/api/health?token=<令牌>'`）。
+- 仅允许配置的那一个域名及其 `https` 同源 Origin；其他域名仍 403，本机回环和局域网访问不需要令牌。
+
+注意：流量经过反向代理第三方（TLS 在其处终止，对代理可见）；持有令牌的人可访问全部聊天文字、图片和模型管理接口。令牌只出现在你的环境变量和首次登录链接中，不要分享。反向代理保留原始 Host 头即可，无需改写。
+
 ## 常见问题
 
 ### 模型尚未就绪

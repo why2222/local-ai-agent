@@ -23,6 +23,8 @@
 
 2026-11-21 新增"模型设置"功能：侧栏齿轮打开面板，展示设备信息（CPU/内存/平台）、内置模型目录（qwen3-vl 2b/4b/8b、minicpm-v:8b、gemma3:4b）及中文/OCR/速度说明、按内存与 Apple Silicon 分档的推荐建议（推荐/可试/不推荐 + 理由）、下载进度（可取消）、切换即时生效并写回 `config.json`。首版不含删除模型。API：`GET /api/models`、`POST /api/models/select`、`POST /api/models/pull`。仅用户主动下载时联网（见 `docs/adr/0002-model-settings.md`）。真实链路已验证：目录与推荐档位、未下载 409、真实 Ollama pull success、select 写回；UI 截图 `runtime/ui-settings.png`。code-review 后修复了 Apple Silicon 分档未生效的缺口并补测试。
 
+2026-11-21 新增"远程访问模式"（**默认关闭，仅调试**）：诊断确认 zconnect 公网域名被 Host 白名单拒绝属设计行为后，用户明确授权实现。`LOCAL_AI_REMOTE_HOST`（精确域名，小写归一、去 :443）+ `LOCAL_AI_REMOTE_TOKEN`（≥16 位 URL 安全随机串）必须成对设置，缺任一或令牌非法均拒绝启动。登录 `/?token=...` 设置 `HttpOnly;Secure;SameSite=Strict` Cookie 并 302 去令牌；API 接受 `?token=`；Origin 仅允许该域名 https 同源；错误日志只记 pathname 不记 query（防令牌落盘）。本机回环/局域网不需令牌。见 `docs/adr/0003-remote-access-mode.md`（含用户知情同意与备选方案）。**当前生产启动命令未开启此模式**，需要时按 README"远程访问模式"节配置。
+
 服务当前在运行：应用 `0.0.0.0:43210`，Ollama `127.0.0.1:11434`。
 
 ## 关键决策
@@ -43,6 +45,7 @@
 ## 禁区与信任边界
 
 - 正常运行不调用云端 AI，不加载外部字体/脚本/CDN/统计；不得为提速改用 `-cloud` 模型。外网仅限两类明确例外：首次安装下载 Ollama/模型、用户在模型设置中主动下载模型（见 `docs/adr/0002-model-settings.md`）；不做后台自动更新检查。
+- 公网访问仅能通过"远程访问模式"显式启用（域名+令牌成对配置，默认关闭）；不得用改写 Host、放开白名单等方式绕过，见 `docs/adr/0003-remote-access-mode.md`。
 - 聊天文字和图片只写入本地 `data/`；日志不记录完整聊天正文或图片内容。
 - 模型输出不得未经转义直接注入 `innerHTML`。
 - 服务校验所有请求参数，拒绝路径穿越、非法文件和不支持的方法。
@@ -51,7 +54,7 @@
 
 ## 验证与测试
 
-- `npm test`：68 个用例，Node 内置 `node:test`，零依赖，约 1 秒。覆盖前端 `createId`、config/Host 校验、storage 原子写入、chat-store（含损坏隔离）、image-store 签名校验、ollama 请求构造与流式/中止、HTTP API 集成（路径穿越、生成锁、停止生成）、模型目录与推荐分档（含 Apple Silicon）、模型列表/切换/下载 API（进度、错误、下载锁）。
+- `npm test`：77 个用例，Node 内置 `node:test`，零依赖，约 1 秒。覆盖前端 `createId`、config/Host 校验、storage 原子写入、chat-store（含损坏隔离）、image-store 签名校验、ollama 请求构造与流式/中止、HTTP API 集成（路径穿越、生成锁、停止生成）、模型目录与推荐分档（含 Apple Silicon）、模型列表/切换/下载 API（进度、错误、下载锁）、远程访问模式（令牌、Cookie、Origin、配置校验）。
 - 测试一律用进程内假 Ollama + 临时数据目录，不加载真实模型、不读写真实 `data/`；真实模型验证保持手工冒烟。
 - `npm run check`：全部 src 与 public 模块（含 `public/id.mjs`）的 `node --check` 语法检查。
 - 前端 DOM 交互无自动化测试，仍靠浏览器手工回归。
@@ -71,8 +74,8 @@
 4. `src/server.mjs`、`src/app.mjs` — HTTP 服务与 API。
 5. `src/ollama.mjs` — Ollama 客户端与流式转发。
 6. `public/app.mjs`、`public/id.mjs` — 前端交互与 ID 生成（含 randomUUID 回退）。
-7. `CONTEXT.md`、`docs/adr/0001-testing-strategy.md`、`docs/adr/0002-model-settings.md` — 领域术语与决策记录。
-8. `src/model-catalog.mjs`、`src/device.mjs` — 模型目录、推荐分档与设备检测；`public/settings.mjs`、`public/http.mjs` — 设置面板与前端公共请求。
+7. `CONTEXT.md`、`docs/adr/` — 领域术语与决策记录（0001 测试策略、0002 模型设置、0003 远程访问模式）。
+8. `src/model-catalog.mjs`、`src/device.mjs`、`src/remote-access.mjs` — 模型目录、设备检测、远程访问控制；`public/settings.mjs`、`public/http.mjs` — 设置面板与前端公共请求。
 9. `test/` — 自动化测试与 `test/helpers/`（假 Ollama、临时数据目录）。
 10. `scripts/` — setup/start 脚本。
 

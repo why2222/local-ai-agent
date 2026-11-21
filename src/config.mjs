@@ -10,6 +10,19 @@ export const ALLOW_LAN = process.env.LOCAL_AI_ALLOW_LAN === '1';
 export const HOST = ALLOW_LAN ? '0.0.0.0' : '127.0.0.1';
 export const OLLAMA_URL = process.env.LOCAL_AI_OLLAMA_URL || 'http://127.0.0.1:11434';
 
+// 远程访问模式：默认关闭，必须同时配置域名和访问令牌才启用。
+export const REMOTE_HOST = (process.env.LOCAL_AI_REMOTE_HOST || '').toLowerCase().replace(/:443$/, '');
+export const REMOTE_TOKEN = process.env.LOCAL_AI_REMOTE_TOKEN || '';
+if (REMOTE_HOST && !REMOTE_TOKEN) {
+  throw new Error('已设置 LOCAL_AI_REMOTE_HOST，必须同时设置 LOCAL_AI_REMOTE_TOKEN（访问令牌），不允许无认证远程访问');
+}
+if (!REMOTE_HOST && REMOTE_TOKEN) {
+  throw new Error('已设置 LOCAL_AI_REMOTE_TOKEN，必须同时设置 LOCAL_AI_REMOTE_HOST（远程访问域名）');
+}
+if (REMOTE_TOKEN && !/^[A-Za-z0-9_-]{16,}$/.test(REMOTE_TOKEN)) {
+  throw new Error('LOCAL_AI_REMOTE_TOKEN 必须是至少 16 位的 URL 安全字符（字母、数字、_、-），请用随机长令牌');
+}
+
 const DEFAULTS = {
   model: 'qwen3-vl:2b-instruct-q4_K_M',
   port: 43210,

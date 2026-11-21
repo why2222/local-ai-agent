@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { CONFIG, isLoopbackHost, saveSelectedModel } from './config.mjs';
 import { MODEL_CATALOG, isCatalogModel, recommendModel } from './model-catalog.mjs';
 import { getDeviceInfo } from './device.mjs';
+import { isRemoteHost, checkRemoteAccess } from './remote-access.mjs';
 import {
   createEmptyChat, listChats, getChat, saveChat, deleteChat, summarize,
   makeTitle, isValidId,
@@ -487,7 +488,16 @@ async function serveStatic(req, res, pathname) {
 }
 
 async function route(req, res) {
-  if (!isLocalRequest(req)) {
+  if (isRemoteHost(req.headers.host)) {
+    const access = checkRemoteAccess(req);
+    if (access.action === 'redirect') {
+      res.writeHead(302, { ...SECURITY_HEADERS, Location: access.location, 'Set-Cookie': access.setCookie });
+      return res.end();
+    }
+    if (access.action === 'deny') {
+      return sendError(res, access.status, access.code, access.message);
+    }
+  } else if (!isLocalRequest(req)) {
     return sendError(res, 403, 'forbidden', '仅允许本机回环地址访问');
   }
 
@@ -549,7 +559,13 @@ export function createApp() {
       } else if (!res.writableEnded) {
         res.end();
       }
-      console.error(`[error] ${req.method} ${req.url}: ${err.name}: ${err.message}`);
+      let pathname = req.url;
+      try {
+        pathname = new URL(req.url, 'http://localhost').pathname;
+      } catch {
+        // 保留原始值用于日志。
+      }
+      console.error(`[error] ${req.method} ${pathname}: ${err.name}: ${err.message}`);
     });
   });
 }
