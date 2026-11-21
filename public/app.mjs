@@ -35,6 +35,7 @@ const state = {
   controller: null,
   selectedFile: null,
   selectedFileUrl: null,
+  currentVision: true,
 };
 
 function icon(name, className = 'icon') {
@@ -51,6 +52,7 @@ async function refreshSidebarModel() {
   try {
     const data = await requestJson('/api/models');
     const current = data.models.find((m) => m.id === data.current);
+    state.currentVision = current ? current.vision !== false : true;
     document.getElementById('model-name').textContent = current ? `${current.family} · 仅在本机运行` : '仅在本机运行';
   } catch {
     // 模型状态由健康检查提示，这里不重复报错。
@@ -419,6 +421,10 @@ async function sendMessage(retry = null) {
   }
 
   const selectedFile = retry ? null : state.selectedFile;
+  if ((selectedFile || retry?.imageId) && state.currentVision === false) {
+    showError('当前模型不支持图片，请移除图片或在模型设置中切换多模态模型');
+    return;
+  }
   const inputText = retry?.text ?? elements.input.value.trim();
   const text = inputText || ((selectedFile || retry?.imageId) ? '请识别并描述这张图片。' : '');
   if (!text && !selectedFile && !retry?.imageId) return;

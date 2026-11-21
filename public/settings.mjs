@@ -7,6 +7,9 @@ const errorBox = document.getElementById('settings-error');
 
 let catalog = [];
 let downloading = null;
+let confirmDownloadId = null;
+let remoteConfirming = false;
+let remoteConfirmTimer = null;
 let notifyChanged = () => {};
 let lastPaint = 0;
 
@@ -32,8 +35,16 @@ function showError(message) {
 async function loadModels() {
   const data = await requestJson('/api/models');
   catalog = data.models;
+  renderCacheInfo(data.cache);
   renderDevice(data.device);
   renderModels();
+}
+
+function renderCacheInfo(cache) {
+  const info = document.getElementById('remote-cache-info');
+  info.textContent = cache?.fetchedAt
+    ? `在线目录 ${cache.count} 个模型 · 更新于 ${new Date(cache.fetchedAt).toLocaleString('zh-CN')}`
+    : '内置目录，可在线获取更多模型';
 }
 
 function renderDevice(device) {
@@ -82,24 +93,43 @@ function actionFor(model) {
   }
   if (model.downloaded) {
     box.append(iconButton('使用此模型', 'secondary-button', () => selectModel(model)));
+  } else if (model.recommendation.level === 'not-recommended' && confirmDownloadId !== model.id) {
+    box.append(iconButton('下载', 'secondary-button', () => {
+      confirmDownloadId = model.id;
+      renderModels();
+    }));
   } else {
-    box.append(iconButton('下载', 'secondary-button', () => startDownload(model)));
+    const label = model.recommendation.level === 'not-recommended' ? '仍要下载？' : '下载';
+    box.append(iconButton(label, 'secondary-button', () => startDownload(model)));
+    if (model.recommendation.level === 'not-recommended' && confirmDownloadId === model.id) {
+      box.append(iconButton('取消', 'secondary-button', () => {
+        confirmDownloadId = null;
+        renderModels();
+      }));
+    }
   }
   return box;
 }
 
 function renderModels() {
   cardsBox.replaceChildren();
+  let lastVision = null;
   for (const model of catalog) {
+    if (model.vision !== lastVision) {
+      lastVision = model.vision;
+      cardsBox.append(el('div', 'model-group-label', model.vision ? '多模态 · 支持图片' : '纯文本 · 不支持图片'));
+    }
     const card = el('article', `model-card${model.inUse ? ' in-use' : ''}`);
     const head = el('div', 'model-card-head');
     head.append(el('strong', '', `${model.family} · ${model.params}`));
     head.append(el('span', `model-badge ${model.recommendation.level}`, LEVEL_TEXT[model.recommendation.level]));
+    if (!model.vision) head.append(el('span', 'model-badge usable', '纯文本'));
     if (model.inUse) head.append(el('span', 'model-badge in-use', '使用中'));
     if (model.downloaded && !model.inUse) head.append(el('span', 'model-badge usable', '已下载'));
     card.append(head);
     card.append(el('p', 'model-summary', model.summary));
-    card.append(el('div', 'model-meta', `中文 ${model.capabilities.chinese} · OCR ${model.capabilities.ocr} · 速度 ${model.capabilities.speed} · 约 ${model.sizeGB} GB`));
+    const sizeText = model.sizeGB ? `约 ${model.sizeGB} GB` : '大小未知';
+    card.append(el('div', 'model-meta', `中文 ${model.capabilities.chinese} · OCR ${model.capabilities.ocr} · 速度 ${model.capabilities.speed} · ${sizeText}`));
     card.append(el('p', 'model-reason', model.recommendation.reason));
     card.append(actionFor(model));
     cardsBox.append(card);
@@ -130,6 +160,7 @@ async function selectModel(model) {
 
 async function startDownload(model) {
   showError();
+  confirmDownloadId = null;
   downloading = { id: model.id, controller: new AbortController(), status: '准备下载', completed: 0, total: 0 };
   renderModels();
   try {
@@ -187,6 +218,34 @@ export async function openSettings({ onModelChanged } = {}) {
   await loadModels().catch((error) => showError(error.message));
 }
 
+async function fetchRemoteDirectory() {
+  const button = document.getElementById('fetch-remote-button');
+  if (!remoteConfirming) {
+    remoteConfirming = true;
+    button.textContent = '确认连接 ollama.com？';
+    remoteConfirmTimer = setTimeout(() => {
+      remoteConfirming = false;
+      button.textContent = '在线获取更多模型';
+    }, 5000);
+    return;
+  }
+  clearTimeout(remoteConfirmTimer);
+  remoteConfirming = false;
+  button.disabled = true;
+  button.textContent = '正在连接 ollama.com…';
+  showError();
+  try {
+    await requestJson('/api/models/fetch-remote', { method: 'POST' });
+    await loadModels();
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = '在线获取更多模型';
+  }
+}
+
+document.getElementById('fetch-remote-button').addEventListener('click', fetchRemoteDirectory);
 document.getElementById('settings-close').addEventListener('click', () => dialog.close());
 dialog.addEventListener('click', (event) => {
   if (event.target === dialog) dialog.close();

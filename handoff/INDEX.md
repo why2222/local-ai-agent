@@ -25,6 +25,8 @@
 
 2026-11-21 新增"远程访问模式"（**默认关闭，仅调试**）：诊断确认 zconnect 公网域名被 Host 白名单拒绝属设计行为后，用户明确授权实现。`LOCAL_AI_REMOTE_HOST`（精确域名，小写归一、去 :443）+ `LOCAL_AI_REMOTE_TOKEN`（≥16 位 URL 安全随机串）必须成对设置，缺任一或令牌非法均拒绝启动。登录 `/?token=...` 设置 `HttpOnly;Secure;SameSite=Strict` Cookie 并 302 去令牌；API 接受 `?token=`；Origin 仅允许该域名 https 同源；错误日志只记 pathname 不记 query（防令牌落盘）。本机回环/局域网不需令牌。见 `docs/adr/0003-remote-access-mode.md`（含用户知情同意与备选方案）。**当前生产启动命令未开启此模式**，需要时按 README"远程访问模式"节配置。
 
+2026-11-21 模型目录升级（C 方案）：内置扩充至 13 个（多模态全档位+热门纯文本含 DeepSeek 系列），新增"在线获取更多模型"按钮（二次确认才连接 ollama.com，不上传应用数据），`src/model-library.mjs` 解析官方库 HTML（实测 271 个模型）并缓存 `data/model-cache.json`，失败回退内置。`POST /api/models/fetch-remote`；目录按使用中→多模态→内置→推荐度排序；纯文本模型发送图片被前后端拦截（`model-no-vision`）；不推荐模型下载需二次确认（可取消）。决策与隐私评估见 `docs/adr/0004-online-model-library.md`。
+
 服务当前在运行：应用 `0.0.0.0:43210`，Ollama `127.0.0.1:11434`。**2026-11-21 已按用户确认启用远程访问模式**：`LOCAL_AI_ALLOW_LAN=1` + `LOCAL_AI_REMOTE_HOST=remote-access-18266.zconnect.cn` + `LOCAL_AI_REMOTE_TOKEN`（令牌仅存于进程环境变量，不写入本文档与仓库）。启动时全链路已验证：回环/局域网 200、远程无令牌或错令牌 401、正确令牌 API 200、页面 302+安全 Cookie、Cookie 访问 200、其他域名 403。关闭方式：去掉这两个 REMOTE 环境变量重启。
 
 ## 关键决策
@@ -44,7 +46,7 @@
 
 ## 禁区与信任边界
 
-- 正常运行不调用云端 AI，不加载外部字体/脚本/CDN/统计；不得为提速改用 `-cloud` 模型。外网仅限两类明确例外：首次安装下载 Ollama/模型、用户在模型设置中主动下载模型（见 `docs/adr/0002-model-settings.md`）；不做后台自动更新检查。
+- 正常运行不调用云端 AI，不加载外部字体/脚本/CDN/统计；不得为提速改用 `-cloud` 模型。外网仅限三类明确例外：首次安装下载 Ollama/模型、用户在模型设置中主动下载模型（`docs/adr/0002`）、用户主动点击在线获取目录（`docs/adr/0004`）；不做后台自动更新或打开面板自动拉取。
 - 公网访问仅能通过"远程访问模式"显式启用（域名+令牌成对配置，默认关闭）；不得用改写 Host、放开白名单等方式绕过，见 `docs/adr/0003-remote-access-mode.md`。
 - 聊天文字和图片只写入本地 `data/`；日志不记录完整聊天正文或图片内容。
 - 模型输出不得未经转义直接注入 `innerHTML`。
@@ -54,7 +56,7 @@
 
 ## 验证与测试
 
-- `npm test`：77 个用例，Node 内置 `node:test`，零依赖，约 1 秒。覆盖前端 `createId`、config/Host 校验、storage 原子写入、chat-store（含损坏隔离）、image-store 签名校验、ollama 请求构造与流式/中止、HTTP API 集成（路径穿越、生成锁、停止生成）、模型目录与推荐分档（含 Apple Silicon）、模型列表/切换/下载 API（进度、错误、下载锁）、远程访问模式（令牌、Cookie、Origin、配置校验）。
+- `npm test`：89 个用例，Node 内置 `node:test`，零依赖，约 1 秒。覆盖前端 `createId`、config/Host 校验、storage 原子写入、chat-store（含损坏隔离）、image-store 签名校验、ollama 请求构造与流式/中止、HTTP API 集成（路径穿越、生成锁、停止生成）、模型目录与推荐分档（含 Apple Silicon）、模型列表/切换/下载 API（进度、错误、下载锁）、远程访问模式（令牌、Cookie、Origin、配置校验）、在线目录解析/缓存/合并与纯文本图片拦截。
 - 测试一律用进程内假 Ollama + 临时数据目录，不加载真实模型、不读写真实 `data/`；真实模型验证保持手工冒烟。
 - `npm run check`：全部 src 与 public 模块（含 `public/id.mjs`）的 `node --check` 语法检查。
 - 前端 DOM 交互无自动化测试，仍靠浏览器手工回归。

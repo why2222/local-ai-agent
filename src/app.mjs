@@ -3,7 +3,8 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { CONFIG, isLoopbackHost, saveSelectedModel } from './config.mjs';
-import { MODEL_CATALOG, isCatalogModel, recommendModel } from './model-catalog.mjs';
+import { recommendModel, sortModelsForDisplay } from './model-catalog.mjs';
+import { getAllModels, getCacheInfo, isCatalogModel, refreshRemoteModels } from './model-library.mjs';
 import { getDeviceInfo } from './device.mjs';
 import { isRemoteHost, checkRemoteAccess } from './remote-access.mjs';
 import {
@@ -207,6 +208,15 @@ async function handleSelectModel(req, res) {
   sendJson(res, 200, { ok: true, model });
 }
 
+async function handleFetchRemoteModels(res) {
+  try {
+    const result = await refreshRemoteModels();
+    sendJson(res, 200, { ok: true, ...result });
+  } catch (err) {
+    sendError(res, 502, 'fetch-failed', `在线获取模型目录失败: ${err.message}`);
+  }
+}
+
 async function handleListModels(res) {
   const device = getDeviceInfo();
   let downloaded = [];
@@ -218,7 +228,8 @@ async function handleListModels(res) {
   sendJson(res, 200, {
     device,
     current: CONFIG.model,
-    models: MODEL_CATALOG.map((model) => ({
+    cache: getCacheInfo(),
+    models: sortModelsForDisplay(getAllModels(), device, CONFIG.model).map((model) => ({
       ...model,
       recommendation: recommendModel(model, device),
       downloaded: downloaded.includes(model.id),
@@ -335,6 +346,10 @@ async function handlePostMessage(req, res, chatId) {
   }
   const imageId = body.imageId ?? null;
   if (imageId !== null) {
+    const currentModel = getAllModels().find((m) => m.id === CONFIG.model);
+    if (currentModel && currentModel.vision === false) {
+      return sendError(res, 400, 'model-no-vision', '当前模型不支持图片，请移除图片或在模型设置中切换多模态模型');
+    }
     if (!UUID_RE.test(imageId)) return sendError(res, 400, 'bad-image-id', 'imageId 必须是 UUID');
     if (!(await imageExists(chatId, imageId))) {
       return sendError(res, 400, 'image-not-found', '图片不存在或不属于该会话');
@@ -509,6 +524,7 @@ async function route(req, res) {
   if (pathname === '/api/models' && method === 'GET') return handleListModels(res);
   if (pathname === '/api/models/select' && method === 'POST') return handleSelectModel(req, res);
   if (pathname === '/api/models/pull' && method === 'POST') return handlePullModel(req, res);
+  if (pathname === '/api/models/fetch-remote' && method === 'POST') return handleFetchRemoteModels(res);
 
   if (pathname === '/api/chats') {
     if (method === 'GET') return handleListChats(res);

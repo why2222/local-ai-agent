@@ -91,6 +91,10 @@
     </div>
     <div class="settings-body">
       <section class="device-card" id="settings-device" aria-label="当前设备"></section>
+      <div class="settings-toolbar">
+        <button class="secondary-button" id="fetch-remote-button" type="button">在线获取更多模型</button>
+        <span class="model-meta" id="remote-cache-info">内置目录，可在线获取更多模型</span>
+      </div>
       <div class="settings-error" id="settings-error" role="alert" hidden></div>
       <div class="model-cards" id="settings-models"></div>
       <p class="settings-note">仅下载模型时联网，模型来自 Ollama 官方仓库 · 切换立即生效，无需重启</p>

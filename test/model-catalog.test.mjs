@@ -1,7 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MODEL_CATALOG, isCatalogModel, recommendModel } from '../src/model-catalog.mjs';
+import { MODEL_CATALOG, recommendModel } from '../src/model-catalog.mjs';
 import { getDeviceInfo } from '../src/device.mjs';
+import { useTempDataDir } from './helpers/temp-dir.mjs';
+
+useTempDataDir('local-ai-catalog-');
+const { isCatalogModel } = await import('../src/model-library.mjs');
 
 function device(memGB, isAppleSilicon = false) {
   return { totalMemBytes: memGB * 1024 ** 3, isAppleSilicon };

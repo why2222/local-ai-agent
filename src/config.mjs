@@ -9,6 +9,7 @@ export const ROOT_DIR = path.resolve(SRC_DIR, '..');
 export const ALLOW_LAN = process.env.LOCAL_AI_ALLOW_LAN === '1';
 export const HOST = ALLOW_LAN ? '0.0.0.0' : '127.0.0.1';
 export const OLLAMA_URL = process.env.LOCAL_AI_OLLAMA_URL || 'http://127.0.0.1:11434';
+export const LIBRARY_URL = process.env.LOCAL_AI_LIBRARY_URL || 'https://ollama.com';
 
 // 远程访问模式：默认关闭，必须同时配置域名和访问令牌才启用。
 export const REMOTE_HOST = (process.env.LOCAL_AI_REMOTE_HOST || '').toLowerCase().replace(/:443$/, '');

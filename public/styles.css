@@ -407,6 +407,9 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 .settings-error { margin-bottom: 12px; padding: 9px 12px; border-radius: 8px; background: rgba(164, 62, 75, .08); color: var(--danger); font-size: 12px; line-height: 1.5; }
 
 .model-cards { display: grid; gap: 10px; }
+.model-group-label { margin: 8px 2px 0; color: var(--muted); font-size: 11px; font-weight: 600; }
+.settings-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.settings-toolbar .secondary-button { min-height: 30px; font-size: 11px; }
 .model-card { padding: 13px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .model-card.in-use { border-color: #b9b0cd; box-shadow: 0 0 0 2px rgba(128, 118, 159, .1); }
 .model-card-head { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
