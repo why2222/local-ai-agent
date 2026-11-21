@@ -253,7 +253,13 @@ function renderMessage(message) {
         const messages = state.currentChat?.messages || [];
         const index = messages.findIndex((item) => item.id === message.id);
         const user = messages.slice(0, index).reverse().find((item) => item.role === 'user');
-        if (user) sendMessage({ text: user.content || user.text || '', imageId: imageIdFrom(user) });
+        if (user?.documentId) {
+          const rawText = user.text || user.content || '';
+          const instruction = rawText.startsWith('上传文档《') ? '' : rawText;
+          sendDocument(instruction, { documentId: user.documentId, name: user.documentName });
+        } else if (user) {
+          sendMessage({ text: user.content || user.text || '', imageId: imageIdFrom(user) });
+        }
       });
       status.append(retryButton);
     }
@@ -411,7 +417,6 @@ function selectDocument(file) {
   elements.selectedDocumentName.textContent = `${file.name}（${(file.size / 1024).toFixed(1)} KB）`;
   elements.selectedDocument.hidden = false;
   updateSendState();
-  void sendDocument();
 }
 
 function clearSelectedFile() {
@@ -462,7 +467,7 @@ async function sendMessage(retry = null) {
   }
 
   if (!retry && state.selectedDocument) {
-    await sendDocument();
+    await sendDocument(elements.input.value.trim());
     return;
   }
 
@@ -544,42 +549,52 @@ async function sendMessage(retry = null) {
   }
 }
 
-async function sendDocument() {
+async function sendDocument(instruction = '', retryDoc = null) {
   if (state.generating) {
     state.controller?.abort();
     return;
   }
-  const file = state.selectedDocument;
-  if (!file) return;
+  const file = retryDoc ? null : state.selectedDocument;
+  if (!file && !retryDoc) return;
   if (!state.currentChat) await createChat({ focus: false });
   const chatId = state.currentChat.id;
   setGenerating(true);
 
+  const docName = retryDoc?.name || file.name;
   const userMessage = {
     id: createId(), role: 'user',
-    content: `上传文档《${file.name}》，生成摘要`,
-    status: 'complete', documentName: file.name,
+    content: instruction || `上传文档《${docName}》，生成摘要`,
+    status: 'complete', documentName: docName,
   };
   const assistantMessage = {
     id: createId(), role: 'assistant', content: '', status: 'streaming',
-    progress: '准备上传文档', documentName: file.name,
+    progress: retryDoc ? '准备重新生成摘要' : '准备上传文档', documentName: docName,
   };
   state.currentChat.messages ||= [];
   state.currentChat.messages.push(userMessage, assistantMessage);
   renderChat();
   clearSelectedDocument();
+  elements.input.value = '';
+  autoResizeInput();
+  updateSendState();
   state.controller = new AbortController();
 
   try {
-    const { document: doc } = await requestJson(`/api/chats/${encodeURIComponent(chatId)}/documents`, {
+    let docId = retryDoc?.documentId;
+    if (!docId) {
+      const { document: doc } = await requestJson(`/api/chats/${encodeURIComponent(chatId)}/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream', 'X-Document-Name': encodeURIComponent(file.name) },
+        body: file,
+      });
+      docId = doc.id;
+    }
+    userMessage.documentId = docId;
+    assistantMessage.documentId = docId;
+    const response = await request(`/api/chats/${encodeURIComponent(chatId)}/documents/${encodeURIComponent(docId)}/summarize`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream', 'X-Document-Name': encodeURIComponent(file.name) },
-      body: file,
-    });
-    userMessage.documentId = doc.id;
-    assistantMessage.documentId = doc.id;
-    const response = await request(`/api/chats/${encodeURIComponent(chatId)}/documents/${encodeURIComponent(doc.id)}/summarize`, {
-      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instruction }),
       signal: state.controller.signal,
     });
     await consumeDocumentStream(response, assistantMessage);

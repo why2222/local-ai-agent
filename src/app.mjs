@@ -402,6 +402,17 @@ async function handleSummarizeDocument(req, res, chatId, docId) {
     return sendError(res, 404, 'document-not-found', '文档不存在');
   }
 
+  let instruction = '';
+  try {
+    const raw = await readBody(req, 16 * 1024);
+    if (raw.length > 0) {
+      const body = JSON.parse(raw.toString('utf8'));
+      instruction = typeof body?.instruction === 'string' ? body.instruction.trim() : '';
+    }
+  } catch {
+    return sendError(res, 400, 'bad-json', '请求体不是合法 JSON');
+  }
+
   if (!acquireLock()) {
     return sendError(res, 409, 'generation-busy', '已有生成正在进行，请先停止或稍后再试');
   }
@@ -409,7 +420,7 @@ async function handleSummarizeDocument(req, res, chatId, docId) {
   const userMessage = {
     id: randomUUID(),
     role: 'user',
-    text: `上传文档《${meta.name}》（${meta.textChars} 字），生成摘要`,
+    text: instruction || `上传文档《${meta.name}》（${meta.textChars} 字），生成摘要`,
     createdAt: new Date().toISOString(),
     status: 'complete',
     documentId: docId,
@@ -467,7 +478,12 @@ async function handleSummarizeDocument(req, res, chatId, docId) {
       writeNdjson(res, { type: 'batch', index: i + 1, total: batches.length });
       let partial = '';
       for await (const delta of streamChat({
-        messages: [{ role: 'user', content: `请用中文简洁总结以下文档片段（第${i + 1}/${batches.length}批）：\n\n${batches[i]}` }],
+        messages: [{
+          role: 'user',
+          content: instruction
+            ? `用户要求：${instruction}\n\n请根据上述要求处理以下文档片段（第${i + 1}/${batches.length}批）：\n\n${batches[i]}`
+            : `请用中文简洁总结以下文档片段（第${i + 1}/${batches.length}批）：\n\n${batches[i]}`,
+        }],
         signal: abort.signal,
       })) {
         partial += delta;
@@ -482,7 +498,7 @@ async function handleSummarizeDocument(req, res, chatId, docId) {
     }
 
     writeNdjson(res, { type: 'final-start' });
-    const summaryPrompt = buildSummaryPrompt(meta.name, partials);
+    const summaryPrompt = buildSummaryPrompt(meta.name, partials, instruction);
     for await (const delta of streamChat({
       messages: [{ role: 'user', content: summaryPrompt }],
       signal: abort.signal,

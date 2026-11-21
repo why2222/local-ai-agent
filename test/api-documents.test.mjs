@@ -202,3 +202,22 @@ test('DOCX 原文以 Office MIME 返回，PDF 原文以 application/pdf 返回',
   assert.equal(raw.status, 200);
   assert.match(raw.headers['content-type'], /wordprocessingml/);
 });
+
+test('summarize 接受用户自定义指令并融入提示词', async () => {
+  fake.state.onChat = completeChat;
+  const chat = await createChat();
+  const doc = JSON.parse((await uploadDocument(chat.id, '设计.html', Buffer.from('设计规范内容'))).text).document;
+
+  fake.state.requests = [];
+  const res = await apiRequest({
+    method: 'POST', path: `/api/chats/${chat.id}/documents/${doc.id}/summarize`,
+    body: JSON.stringify({ instruction: '提取所有颜色值' }),
+    headers: { 'content-type': 'application/json' },
+  });
+  assert.equal(res.status, 200);
+  assert.ok(fake.state.requests.every((r) => r.messages[0].content.includes('提取所有颜色值')));
+
+  const saved = JSON.parse((await apiRequest({ path: `/api/chats/${chat.id}` })).text).chat;
+  assert.equal(saved.messages[0].text, '提取所有颜色值');
+  assert.equal(saved.messages[0].documentId, doc.id);
+});

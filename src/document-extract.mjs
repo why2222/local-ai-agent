@@ -151,11 +151,14 @@ async function extractXlsx(filePath) {
 }
 
 // 汇总提示词：在 numCtx 预算内截断各片段摘要，保证 reduce 步不超上限。
-export function buildSummaryPrompt(name, partials) {
+export function buildSummaryPrompt(name, partials, instruction = '') {
   const budget = 1500;
   const per = Math.max(60, Math.floor((budget - 100) / Math.max(1, partials.length)));
   const trimmed = partials.map((p) => (p.length > per ? `${p.slice(0, per)}…（有删节）` : p));
-  return `以下是文档《${name}》各片段的摘要，请合并为完整摘要与要点（中文）：\n\n${trimmed.join('\n\n---\n\n')}`;
+  const header = instruction
+    ? `用户要求：${instruction}\n\n以下是文档《${name}》各片段的处理结果，请根据用户要求合并整理为完整回答（中文）：`
+    : `以下是文档《${name}》各片段的摘要，请合并为完整摘要与要点（中文）：`;
+  return `${header}\n\n${trimmed.join('\n\n---\n\n')}`;
 }
 
 // 按段落优先切分批，单批不超过 maxChars；超长段落硬切。
