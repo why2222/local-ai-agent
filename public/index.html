@@ -72,15 +72,22 @@
             <label class="sr-only" for="message-input">输入消息</label>
             <textarea id="message-input" rows="2" maxlength="32000" placeholder="输入消息，或添加图片……" aria-describedby="composer-note form-error"></textarea>
             <div class="composer-tools">
-              <button class="attach secondary-button" id="attach-button" type="button">
-                <svg class="icon" aria-hidden="true"><use href="/icons.svg#paperclip"></use></svg>
-                添加图片
-              </button>
+              <div class="attach-menu-wrap">
+                <button class="icon-button attach-menu-button" id="attach-menu-button" type="button" aria-label="添加附件" aria-expanded="false" aria-controls="attach-menu">
+                  <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"></use></svg>
+                </button>
+                <div class="attach-menu" id="attach-menu" hidden>
+                  <button class="attach-menu-item" id="attach-image-item" type="button">
+                    <svg class="icon" aria-hidden="true"><use href="/icons.svg#paperclip"></use></svg>
+                    添加图片
+                  </button>
+                  <button class="attach-menu-item" id="attach-doc-item" type="button">
+                    <svg class="icon" aria-hidden="true"><use href="/icons.svg#doc"></use></svg>
+                    添加文档
+                  </button>
+                </div>
+              </div>
               <input id="image-input" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
-              <button class="attach secondary-button" id="doc-attach-button" type="button">
-                <svg class="icon" aria-hidden="true"><use href="/icons.svg#doc"></use></svg>
-                添加文档
-              </button>
               <input id="document-input" type="file" hidden accept=".txt,.md,.json,.csv,.log,.pdf,.docx,.xlsx,.js,.mjs,.cjs,.ts,.tsx,.jsx,.py,.java,.go,.rs,.c,.cpp,.h,.cs,.html,.css,.sh,.yml,.yaml,.toml,.xml,.sql">
               <button class="send primary-button" id="send-button" type="submit" aria-label="发送消息" disabled>
                 <svg class="icon" aria-hidden="true"><use id="send-icon" href="/icons.svg#arrow-up"></use></svg>

@@ -13,13 +13,15 @@ const elements = {
   input: $('#message-input'),
   send: $('#send-button'),
   sendIcon: $('#send-icon'),
-  attach: $('#attach-button'),
+  attachMenuButton: $('#attach-menu-button'),
+  attachMenu: $('#attach-menu'),
+  attachImageItem: $('#attach-image-item'),
+  attachDocItem: $('#attach-doc-item'),
   imageInput: $('#image-input'),
   selectedImage: $('#selected-image'),
   selectedDocument: $('#selected-document'),
   selectedDocumentName: $('#selected-document-name'),
   removeDocument: $('#remove-document'),
-  docAttach: $('#doc-attach-button'),
   documentInput: $('#document-input'),
   selectedImagePreview: $('#selected-image-preview'),
   selectedImageName: $('#selected-image-name'),
@@ -373,8 +375,7 @@ function setGenerating(generating) {
   elements.sendIcon.setAttribute('href', generating ? '/icons.svg#stop' : '/icons.svg#arrow-up');
   elements.newChat.disabled = generating;
   elements.input.readOnly = generating;
-  elements.attach.disabled = generating;
-  elements.docAttach.disabled = generating;
+  elements.attachMenuButton.disabled = generating;
   updateSendState();
   renderChatList();
 }
@@ -744,8 +745,28 @@ elements.input.addEventListener('keydown', (event) => {
   }
 });
 elements.newChat.addEventListener('click', () => createChat().catch((error) => showError(error.message)));
-elements.attach.addEventListener('click', () => elements.imageInput.click());
-elements.docAttach.addEventListener('click', () => elements.documentInput.click());
+function closeAttachMenu() {
+  elements.attachMenu.hidden = true;
+  elements.attachMenuButton.setAttribute('aria-expanded', 'false');
+}
+
+elements.attachMenuButton.addEventListener('click', (event) => {
+  event.stopPropagation();
+  const open = elements.attachMenu.hidden;
+  elements.attachMenu.hidden = !open;
+  elements.attachMenuButton.setAttribute('aria-expanded', String(open));
+});
+elements.attachImageItem.addEventListener('click', () => {
+  closeAttachMenu();
+  elements.imageInput.click();
+});
+elements.attachDocItem.addEventListener('click', () => {
+  closeAttachMenu();
+  elements.documentInput.click();
+});
+document.addEventListener('click', (event) => {
+  if (!event.target.closest('.attach-menu-wrap')) closeAttachMenu();
+});
 elements.documentInput.addEventListener('change', () => selectDocument(elements.documentInput.files[0]));
 elements.removeDocument.addEventListener('click', clearSelectedDocument);
 elements.imageInput.addEventListener('change', () => selectFile(elements.imageInput.files[0]));
@@ -762,7 +783,10 @@ document.getElementById('settings-button').addEventListener('click', () => {
 elements.sidebarToggle.addEventListener('click', toggleSidebar);
 elements.sidebarBackdrop.addEventListener('click', closeSidebar);
 window.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') closeSidebar();
+  if (event.key === 'Escape') {
+    closeSidebar();
+    closeAttachMenu();
+  }
 });
 window.addEventListener('beforeunload', () => {
   state.controller?.abort();
