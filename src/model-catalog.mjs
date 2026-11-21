@@ -1,5 +1,57 @@
 // 内置精选模型目录：离线可浏览，仅用户主动下载时才访问 Ollama 仓库。
+const VENDOR_BY_PREFIX = [
+  ['qwen', 'qwen'], ['deepseek', 'deepseek'], ['gemma', 'google'], ['llama', 'meta'],
+  ['minicpm', 'openbmb'], ['moondream', 'moondream'], ['phi', 'microsoft'],
+  ['granite', 'ibm'], ['lfm', 'liquid'],
+];
+
+export function vendorOf(id) {
+  for (const [prefix, vendor] of VENDOR_BY_PREFIX) {
+    if (id.startsWith(prefix)) return vendor;
+  }
+  return 'other';
+}
+
+const RELEASE_DATES = {
+  'qwen3.5:4b': '2026-03', 'qwen3.5:2b': '2026-03',
+  'qwen3-vl:2b-instruct-q4_K_M': '2025-11',
+  'qwen3-vl:4b-instruct-q4_K_M': '2025-11',
+  'qwen3-vl:8b': '2025-11',
+  'qwen2.5vl:3b': '2025-01',
+  'minicpm-v:8b': '2024-08',
+  'llama3.2-vision:11b': '2024-09',
+  'moondream:1.8b': '2024-04',
+  'gemma3:4b': '2025-03', 'gemma3:1b': '2025-03',
+  'deepseek-r1:1.5b': '2025-01', 'deepseek-r1:8b': '2025-01',
+  'qwen3:4b': '2025-04', 'qwen3:8b': '2025-04',
+};
+
+// 精选模型有真实发布代际；官方库模型只有"库更新时间"（非首发时间）。
+export function releaseDateOf(model) {
+  return RELEASE_DATES[model.id] || null;
+}
+
 export const MODEL_CATALOG = [
+  {
+    id: 'qwen3.5:4b',
+    family: 'Qwen3.5',
+    params: '4B',
+    tier: 2,
+    sizeGB: 3.1,
+    vision: true,
+    summary: '新一代 Qwen：原生视觉。注意：本机实测生成极慢且失败，仅建议 M 系列或更强设备尝试。',
+    capabilities: { chinese: '优秀', ocr: '优秀', speed: '中' },
+  },
+  {
+    id: 'qwen3.5:2b',
+    family: 'Qwen3.5',
+    params: '2B',
+    tier: 1,
+    sizeGB: 2.7,
+    vision: true,
+    summary: '新一代轻量视觉模型。注意：4B 版本在本机实测不可用，2B 未验证，仅建议 M 系列或更强设备尝试。',
+    capabilities: { chinese: '优秀', ocr: '良好', speed: '快' },
+  },
   {
     id: 'qwen3-vl:2b-instruct-q4_K_M',
     family: 'Qwen3-VL',

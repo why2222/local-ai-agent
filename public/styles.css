@@ -590,3 +590,5 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 .message-body th, .message-body td { padding: 8px 12px; border: 1px solid var(--line); text-align: left; }
 .message-body th { background: var(--accent-soft); font-weight: 600; }
 .message-body a { color: var(--accent-dark); text-decoration: underline; text-underline-offset: 3px; }
+.model-badge.pick { background: transparent; border: 1px solid #b9b0cd; color: var(--accent-dark); }
+.chip-label { margin-right: 2px; color: var(--muted); font-size: 10px; }

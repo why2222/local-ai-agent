@@ -3,7 +3,7 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { CONFIG, isLoopbackHost, saveSelectedModel } from './config.mjs';
-import { recommendModel, sortModelsForDisplay } from './model-catalog.mjs';
+import { recommendModel, sortModelsForDisplay, vendorOf, releaseDateOf } from './model-catalog.mjs';
 import { getAllModels, getCacheInfo, isCatalogModel, refreshRemoteModels } from './model-library.mjs';
 import { getDeviceInfo } from './device.mjs';
 import { DOCUMENT_EXTENSIONS, DocumentError, buildSummaryPrompt } from './document-extract.mjs';
@@ -234,6 +234,8 @@ async function handleListModels(res) {
     cache: getCacheInfo(),
     models: sortModelsForDisplay(getAllModels(), device, CONFIG.model).map((model) => ({
       ...model,
+      vendor: vendorOf(model.id),
+      releaseDate: releaseDateOf(model),
       recommendation: recommendModel(model, device),
       downloaded: downloaded.includes(model.id),
       inUse: model.id === CONFIG.model,

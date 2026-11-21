@@ -1,5 +1,5 @@
 import { requestJson } from './http.mjs';
-import { filterModelsForView } from './model-view.mjs';
+import { filterModelsForView, VENDOR_ORDER, VENDOR_LABELS } from './model-view.mjs';
 
 const dialog = document.getElementById('settings-dialog');
 const deviceCard = document.getElementById('settings-device');
@@ -15,7 +15,7 @@ let remoteConfirmTimer = null;
 let notifyChanged = () => {};
 let lastPaint = 0;
 let expandedId;
-const view = { searchText: '', filterType: 'all', remoteExpanded: false };
+const view = { searchText: '', filterType: 'all', vendors: [] };
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -42,7 +42,36 @@ async function loadModels() {
   cacheInfo = data.cache;
   if (expandedId === undefined) expandedId = data.current;
   renderDevice(data.device);
+  renderVendorChips();
   renderModels();
+}
+
+function renderVendorChips() {
+  const box = document.getElementById('vendor-filters');
+  box.replaceChildren();
+  const label = el('span', 'chip-label', '厂商');
+  box.append(label);
+  const allChip = el('button', `chip${view.vendors.length === 0 ? ' on' : ''}`, '全部');
+  allChip.type = 'button';
+  allChip.addEventListener('click', () => {
+    view.vendors = [];
+    renderVendorChips();
+    renderModels();
+  });
+  box.append(allChip);
+  const present = new Set(catalog.map((m) => m.vendor));
+  for (const vendor of VENDOR_ORDER) {
+    if (!present.has(vendor)) continue;
+    const selected = view.vendors.includes(vendor);
+    const chip = el('button', `chip${selected ? ' on' : ''}`, VENDOR_LABELS[vendor].split(' · ')[0]);
+    chip.type = 'button';
+    chip.addEventListener('click', () => {
+      view.vendors = selected ? view.vendors.filter((v) => v !== vendor) : [...view.vendors, vendor];
+      renderVendorChips();
+      renderModels();
+    });
+    box.append(chip);
+  }
 }
 
 function renderDevice(device) {
@@ -108,11 +137,14 @@ function modelRow(model) {
   nameButton.setAttribute('aria-controls', `detail-${model.id}`);
   nameButton.addEventListener('click', () => toggleExpanded(model));
   row.append(nameButton);
+  if (model.source !== 'remote') row.append(el('span', 'model-badge pick', '精选'));
   row.append(el('span', `model-badge ${model.recommendation.level}`, LEVEL_TEXT[model.recommendation.level]));
   if (!model.vision) row.append(el('span', 'model-badge neutral', '纯文本'));
   if (model.inUse) row.append(el('span', 'model-badge in-use', '使用中'));
   else if (model.downloaded) row.append(el('span', 'model-badge neutral', '已下载'));
   row.append(el('span', 'sp'));
+  const timeText = model.releaseDate ? `${model.releaseDate} 发布` : model.updatedAt ? `库更新于 ${model.updatedAt}` : '';
+  if (timeText) row.append(el('span', 'meta', timeText));
   row.append(el('span', 'meta', model.sizeGB ? `${model.sizeGB} GB` : '—'));
   row.append(actionFor(model));
   row.addEventListener('click', (event) => {
@@ -160,18 +192,6 @@ function renderModels() {
     return;
   }
   for (const group of groups) {
-    if (group.key === 'remote' && group.collapsed) {
-      const fold = el('button', 'model-fold');
-      fold.type = 'button';
-      const updated = cacheInfo?.fetchedAt ? `更新于 ${new Date(cacheInfo.fetchedAt).toLocaleDateString('zh-CN')}` : '';
-      fold.append(el('span', '', group.label), el('small', '', updated));
-      fold.addEventListener('click', () => {
-        view.remoteExpanded = true;
-        renderModels();
-      });
-      cardsBox.append(fold);
-      continue;
-    }
     cardsBox.append(el('div', 'model-group-label', group.label));
     for (const model of group.models) {
       cardsBox.append(modelRow(model));
@@ -264,7 +284,7 @@ async function fetchRemoteDirectory() {
     button.textContent = '确认连接 ollama.com？';
     remoteConfirmTimer = setTimeout(() => {
       remoteConfirming = false;
-      button.textContent = '在线获取更多模型';
+      button.textContent = '更新模型目录';
     }, 5000);
     return;
   }
@@ -280,7 +300,7 @@ async function fetchRemoteDirectory() {
     showError(error.message);
   } finally {
     button.disabled = false;
-    button.textContent = '在线获取更多模型';
+    button.textContent = '更新模型目录';
   }
 }
 

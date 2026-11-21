@@ -3,50 +3,49 @@ import assert from 'node:assert/strict';
 import { filterModelsForView } from '../public/model-view.mjs';
 
 const MODELS = [
-  { id: 'qwen3-vl:2b', family: 'Qwen3-VL', vision: true, downloaded: true, summary: '默认模型' },
-  { id: 'deepseek-r1:1.5b', family: 'DeepSeek-R1', vision: false, downloaded: false, summary: '纯文本推理' },
-  { id: 'deepseek-ocr', family: 'deepseek-ocr', vision: true, downloaded: false, summary: 'OCR model', source: 'remote' },
-  { id: 'bonsai-2', family: 'bonsai-2', vision: true, downloaded: false, summary: 'Vision model', source: 'remote' },
-  { id: 'tiny-text', family: 'tiny-text', vision: false, downloaded: true, summary: 'text', source: 'remote' },
+  { id: 'qwen3.5:4b', family: 'Qwen3.5', vendor: 'qwen', vision: true, downloaded: true, inUse: false, releaseDate: '2026-03', summary: '新一代', recommendation: { level: 'recommended' } },
+  { id: 'qwen3-vl:2b', family: 'Qwen3-VL', vendor: 'qwen', vision: true, downloaded: true, inUse: true, releaseDate: '2025-11', summary: '默认', recommendation: { level: 'recommended' } },
+  { id: 'qwen2.5vl:3b', family: 'Qwen2.5-VL', vendor: 'qwen', vision: true, downloaded: false, inUse: false, releaseDate: '2025-01', summary: '上一代', recommendation: { level: 'recommended' } },
+  { id: 'deepseek-r1:1.5b', family: 'DeepSeek-R1', vendor: 'deepseek', vision: false, downloaded: false, inUse: false, releaseDate: '2025-01', summary: '纯文本推理', recommendation: { level: 'recommended' } },
+  { id: 'deepseek-ocr', family: 'deepseek-ocr', vendor: 'deepseek', vision: true, downloaded: false, inUse: false, releaseDate: null, updatedAt: '2025-12-01', summary: 'OCR model', source: 'remote', recommendation: { level: 'usable' } },
+  { id: 'gemma4:e4b', family: 'Gemma 4', vendor: 'google', vision: true, downloaded: false, inUse: false, releaseDate: null, updatedAt: '2026-06-01', summary: 'Google 多模态', recommendation: { level: 'usable' } },
 ];
 
-test('默认按多模态/纯文本分组，在线目录折叠', () => {
-  const groups = filterModelsForView(MODELS, {});
-  assert.deepEqual(groups.map((g) => g.key), ['vision', 'text', 'remote']);
-  assert.equal(groups[0].models.length, 1);
-  assert.equal(groups[1].models.length, 1);
-  assert.equal(groups[2].collapsed, true);
-  assert.equal(groups[2].models.length, 3);
+test('按厂商分组，组内按时间新到旧排序，使用中优先', () => {
+  const groups = filterModelsForView(MODELS);
+  assert.deepEqual(groups.map((g) => g.key), ['qwen', 'deepseek', 'google']);
+  const qwen = groups[0].models.map((m) => m.id);
+  assert.equal(qwen[0], 'qwen3-vl:2b', '使用中排最前');
+  assert.deepEqual(qwen.slice(1), ['qwen3.5:4b', 'qwen2.5vl:3b'], '其余按时间新到旧');
+  assert.equal(groups[0].label, 'Qwen · 阿里通义');
 });
 
-test('手动展开在线目录', () => {
-  const groups = filterModelsForView(MODELS, { remoteExpanded: true });
-  assert.equal(groups.find((g) => g.key === 'remote').collapsed, false);
+test('厂商多选：只显示选中厂商（可多选）', () => {
+  const groups = filterModelsForView(MODELS, { vendors: ['qwen', 'google'] });
+  assert.deepEqual(groups.map((g) => g.key), ['qwen', 'google']);
+  assert.ok(!groups.some((g) => g.key === 'deepseek'));
 });
 
-test('搜索跨全部目录且强制展开在线目录', () => {
-  const groups = filterModelsForView(MODELS, { searchText: 'deepseek' });
-  assert.equal(groups.find((g) => g.key === 'remote').collapsed, false);
-  const remote = groups.find((g) => g.key === 'remote');
-  assert.deepEqual(remote.models.map((m) => m.id), ['deepseek-ocr']);
-  assert.equal(groups.find((g) => g.key === 'text').models.length, 1);
+test('厂商+类型组合筛选（Qwen + 多模态）', () => {
+  const groups = filterModelsForView(MODELS, { vendors: ['qwen'], filterType: 'vision' });
+  assert.equal(groups.length, 1);
+  assert.ok(groups[0].models.every((m) => m.vendor === 'qwen' && m.vision));
 });
 
-test('已下载筛选只保留已下载并展开在线目录', () => {
-  const groups = filterModelsForView(MODELS, { filterType: 'downloaded' });
-  assert.equal(groups.find((g) => g.key === 'remote').collapsed, false);
+test('纯文本筛选排除视觉模型', () => {
+  const groups = filterModelsForView(MODELS, { filterType: 'text' });
   const all = groups.flatMap((g) => g.models);
-  assert.deepEqual(all.map((m) => m.id), ['qwen3-vl:2b', 'tiny-text']);
+  assert.deepEqual(all.map((m) => m.id), ['deepseek-r1:1.5b']);
 });
 
-test('多模态筛选排除纯文本（含在线目录中的纯文本）', () => {
-  const groups = filterModelsForView(MODELS, { filterType: 'vision', remoteExpanded: true });
-  const all = groups.flatMap((g) => g.models);
-  assert.ok(all.every((m) => m.vision));
-  assert.ok(!groups.some((g) => g.key === 'text'));
+test('搜索跨全部目录，已下载筛选只保留已下载', () => {
+  const found = filterModelsForView(MODELS, { searchText: 'deepseek' });
+  const all = found.flatMap((g) => g.models);
+  assert.deepEqual(all.map((m) => m.id).sort(), ['deepseek-ocr', 'deepseek-r1:1.5b']);
+  const downloaded = filterModelsForView(MODELS, { filterType: 'downloaded' });
+  assert.deepEqual(downloaded.flatMap((g) => g.models).map((m) => m.id).sort(), ['qwen3-vl:2b', 'qwen3.5:4b']);
 });
 
-test('无匹配时返回空分组列表', () => {
-  const groups = filterModelsForView(MODELS, { searchText: 'no-such-model' });
-  assert.deepEqual(groups, []);
+test('无匹配返回空分组', () => {
+  assert.deepEqual(filterModelsForView(MODELS, { searchText: 'no-such' }), []);
 });

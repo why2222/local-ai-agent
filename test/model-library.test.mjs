@@ -18,8 +18,8 @@ const FIXTURE = `
     <div><span class="inline-flex rounded-md bg-indigo-50">vision</span><span class="inline-flex rounded-md bg-indigo-50">tools</span>
     <span class="inline-flex rounded-md bg-[#ddf4ff] px-2">2b</span><span class="inline-flex rounded-md bg-[#ddf4ff] px-2">4b</span><span class="inline-flex rounded-md bg-[#ddf4ff] px-2">8b</span></div>
   </a></li>
-  <li><a href="/library/deepseek-r1" class="group w-full space-y-5">
-    <div title="deepseek-r1"><h2><div><span class="group-hover:underline truncate">deepseek-r1</span></div></h2>
+  <li><a href="/library/deepseek-ocr" class="group w-full space-y-5">
+    <div title="deepseek-ocr"><h2><div><span class="group-hover:underline truncate">deepseek-ocr</span></div></h2>
     <p class="max-w-lg break-words text-neutral-800 text-md">DeepSeek reasoning model</p></div>
     <div><span class="inline-flex rounded-md bg-indigo-50">thinking</span>
     <span class="inline-flex rounded-md bg-[#ddf4ff] px-2">1.5b</span><span class="inline-flex rounded-md bg-[#ddf4ff] px-2">8b</span></div>
@@ -42,7 +42,7 @@ test('解析官方库卡片：名称、描述、vision、尺寸与 tier 推断',
   assert.equal(vl.source, 'remote');
   assert.equal(vl.sizeGB, null);
 
-  const r1 = models.find((m) => m.id === 'deepseek-r1');
+  const r1 = models.find((m) => m.id === 'deepseek-ocr');
   assert.equal(r1.vision, false);
   assert.equal(r1.tier, 1);
   assert.equal(r1.capabilities.ocr, '不支持');
@@ -74,8 +74,8 @@ test('在线获取成功后写入缓存并合并目录，重复获取不重复',
     assert.equal(saved.models.length, 3);
 
     const all = getAllModels();
-    assert.ok(all.some((m) => m.id === 'deepseek-r1'));
-    assert.ok(all.some((m) => m.id === 'qwen3-vl'));
+    assert.ok(all.some((m) => m.id === 'deepseek-ocr'));
+    assert.ok(!all.some((m) => m.id === 'qwen3-vl'), '与内置同基础名的官方条目应被去重');
     const ids = all.map((m) => m.id);
     assert.equal(new Set(ids).size, ids.length, '合并目录的模型 id 不应重复');
     const before = all.length;
@@ -95,7 +95,7 @@ test('获取失败时保留现有缓存与目录', async () => {
   try {
     await assert.rejects(() => refreshRemoteModels({ baseUrl: `http://127.0.0.1:${server.address().port}` }));
     assert.equal(getCachedModels().length, 3);
-    assert.ok(getAllModels().some((m) => m.id === 'deepseek-r1'));
+    assert.ok(getAllModels().some((m) => m.id === 'deepseek-ocr'));
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
@@ -110,9 +110,9 @@ test('缓存文件损坏时回退为内置目录', async () => {
 
 test('无 vision 标签但命名明确的视觉模型也归为多模态', () => {
   const card = (id) => `<li><a href="/library/${id}" class="group"><div><h2><div><span class="group-hover:underline truncate">${id}</span></div></h2><p class="max-w-lg break-words text-neutral-800 text-md">x</p></div></a></li>`;
-  const models = parseLibraryHtml(card('qwen2.5vl') + card('llama3.2-vision') + card('llava') + card('deepseek-r1'));
+  const models = parseLibraryHtml(card('qwen2.5vl') + card('llama3.2-vision') + card('llava') + card('deepseek-ocr'));
   assert.equal(models.find((m) => m.id === 'qwen2.5vl').vision, true);
   assert.equal(models.find((m) => m.id === 'llama3.2-vision').vision, true);
   assert.equal(models.find((m) => m.id === 'llava').vision, true);
-  assert.equal(models.find((m) => m.id === 'deepseek-r1').vision, false);
+  assert.equal(models.find((m) => m.id === 'deepseek-ocr').vision, false);
 });

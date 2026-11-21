@@ -60,6 +60,8 @@ export function parseLibraryHtml(html) {
     const tier = minB === null ? 2 : minB <= 3 ? 1 : minB <= 6 ? 2 : 3;
     const smallestLabel = sizeLabels.length ? sizeLabels[0].toUpperCase() : '—';
     const vision = isVisionModel(id, segment);
+    const updatedMatch = segment.match(/title="([A-Z][a-z]{2} \d{1,2}, \d{4})[^"]*"/);
+    const updatedAt = updatedMatch ? new Date(updatedMatch[1]).toISOString().slice(0, 10) : null;
 
     models.push({
       id,
@@ -71,6 +73,7 @@ export function parseLibraryHtml(html) {
       summary,
       capabilities: { chinese: '未知', ocr: vision ? '未知' : '不支持', speed: SPEED_BY_TIER[tier] },
       source: 'remote',
+      updatedAt,
     });
   }
   return models;
@@ -85,8 +88,16 @@ export function getCacheInfo() {
 }
 
 export function getAllModels() {
-  const ids = new Set(MODEL_CATALOG.map((m) => m.id));
-  return [...MODEL_CATALOG, ...cache.models.filter((m) => !ids.has(m.id))];
+  // 内置精选全部保留；官方库中与内置同基础名的条目去重（内置描述优先）。
+  const builtinBase = new Set(MODEL_CATALOG.map((m) => m.id.split(':')[0]));
+  const seen = new Set();
+  const remote = [];
+  for (const m of cache.models) {
+    if (builtinBase.has(m.id.split(':')[0]) || seen.has(m.id)) continue;
+    seen.add(m.id);
+    remote.push(m);
+  }
+  return [...MODEL_CATALOG, ...remote];
 }
 
 export function isCatalogModel(id) {

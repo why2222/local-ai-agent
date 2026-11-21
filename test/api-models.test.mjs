@@ -61,7 +61,7 @@ test('GET /api/models 返回设备信息、推荐建议和下载/使用中标记
   assert.ok(data.device.totalMemBytes > 0);
   assert.ok(data.device.cpuModel.length > 0);
   assert.equal(data.current, 'qwen3-vl:2b-instruct-q4_K_M');
-  assert.equal(data.models.length, 13);
+  assert.equal(data.models.length, 15);
 
   const twoB = data.models.find((m) => m.id === 'qwen3-vl:2b-instruct-q4_K_M');
   assert.equal(twoB.downloaded, true);

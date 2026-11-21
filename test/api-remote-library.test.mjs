@@ -5,7 +5,7 @@ import { startFakeOllama, writeNdjsonLines } from './helpers/fake-ollama.mjs';
 import { useTempDataDir } from './helpers/temp-dir.mjs';
 
 useTempDataDir('local-ai-remote-library-api-');
-const fake = await startFakeOllama({ models: ['qwen3-vl:2b-instruct-q4_K_M', 'deepseek-r1'] });
+const fake = await startFakeOllama({ models: ['qwen3-vl:2b-instruct-q4_K_M', 'deepseek-r1:1.5b'] });
 process.env.LOCAL_AI_OLLAMA_URL = fake.url;
 
 const libraryState = { fail: false };
@@ -16,8 +16,8 @@ const library = createServer((req, res) => {
     return;
   }
   res.writeHead(200, { 'Content-Type': 'text/html' });
-  res.end(`<ul><li><a href="/library/deepseek-r1" class="group">
-    <div><h2><div><span class="group-hover:underline truncate">deepseek-r1</span></div></h2>
+  res.end(`<ul><li><a href="/library/deepseek-ocr" class="group">
+    <div><h2><div><span class="group-hover:underline truncate">deepseek-ocr</span></div></h2>
     <p class="max-w-lg break-words text-neutral-800 text-md">DeepSeek reasoning model</p></div>
     <div><span class="inline-flex rounded-md bg-indigo-50">thinking</span>
     <span class="inline-flex rounded-md bg-[#ddf4ff] px-2">1.5b</span></div>
@@ -65,21 +65,21 @@ test('主动获取在线目录：合并模型与缓存信息，远程模型可�
   const list = JSON.parse((await apiRequest({ path: '/api/models' })).text);
   assert.equal(list.cache.count, 1);
   assert.ok(list.cache.fetchedAt);
-  const remote = list.models.find((m) => m.id === 'deepseek-r1');
+  const remote = list.models.find((m) => m.id === 'deepseek-ocr');
   assert.equal(remote.source, 'remote');
   assert.equal(remote.vision, false);
-  assert.equal(remote.downloaded, true);
+  assert.equal(remote.downloaded, false);
 
   fake.state.onPull = (payload, req, res2) => {
     res2.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
     writeNdjsonLines(res2, [{ status: 'success' }]);
   };
   const pull = await apiRequest({
-    method: 'POST', path: '/api/models/pull', body: JSON.stringify({ model: 'deepseek-r1' }),
+    method: 'POST', path: '/api/models/pull', body: JSON.stringify({ model: 'deepseek-ocr' }),
     headers: { 'content-type': 'application/json' },
   });
   assert.equal(pull.status, 200);
-  assert.equal(fake.state.pulls[0].model, 'deepseek-r1');
+  assert.equal(fake.state.pulls[0].model, 'deepseek-ocr');
 });
 
 test('在线获取失败返回 502，目录保持可用', async () => {
@@ -93,7 +93,7 @@ test('在线获取失败返回 502，目录保持可用', async () => {
 
 test('纯文本模型拒绝带图片的消息，移除图片或切回多模态后可发送', async () => {
   const select = await apiRequest({
-    method: 'POST', path: '/api/models/select', body: JSON.stringify({ model: 'deepseek-r1' }),
+    method: 'POST', path: '/api/models/select', body: JSON.stringify({ model: 'deepseek-r1:1.5b' }),
     headers: { 'content-type': 'application/json' },
   });
   assert.equal(select.status, 200);
