@@ -2,13 +2,15 @@ import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { CONFIG, isLoopbackHost } from './config.mjs';
+import { CONFIG, isLoopbackHost, saveSelectedModel } from './config.mjs';
+import { MODEL_CATALOG, isCatalogModel, recommendModel } from './model-catalog.mjs';
+import { getDeviceInfo } from './device.mjs';
 import {
   createEmptyChat, listChats, getChat, saveChat, deleteChat, summarize,
   makeTitle, isValidId,
 } from './chat-store.mjs';
 import { saveImage, readImage, imageExists, ImageValidationError } from './image-store.mjs';
-import { streamChat, buildOllamaMessages, assertModelAvailable, checkHealth, OllamaError } from './ollama.mjs';
+import { streamChat, buildOllamaMessages, assertModelAvailable, checkHealth, listDownloadedModels, pullModel, OllamaError } from './ollama.mjs';
 
 const MAX_TEXT_CHARS = 32 * 1024;
 const GENERATION_IDLE_TIMEOUT_MS = 900_000;
@@ -23,6 +25,9 @@ function acquireLock() {
 function releaseLock() {
   generationLock.active = false;
 }
+
+// 下载与生成使用独立的锁，互不影响。
+const downloadLock = { active: false };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -117,6 +122,108 @@ function isLocalRequest(req) {
     }
   }
   return true;
+}
+
+// 解析并校验请求体中的目录内模型 id；失败时已发送错误响应，返回 null。
+async function readCatalogModel(req, res) {
+  let body;
+  try {
+    body = await readJsonBody(req, 16 * 1024);
+  } catch (err) {
+    sendError(res, 400, 'bad-json', err.message);
+    return null;
+  }
+  const model = typeof body?.model === 'string' ? body.model : '';
+  if (!isCatalogModel(model)) {
+    sendError(res, 400, 'unknown-model', '模型不在可选目录中');
+    return null;
+  }
+  return model;
+}
+
+async function handlePullModel(req, res) {
+  const model = await readCatalogModel(req, res);
+  if (!model) return;
+  if (downloadLock.active) {
+    return sendError(res, 409, 'download-busy', '已有下载正在进行，请稍后再试');
+  }
+  downloadLock.active = true;
+
+  res.writeHead(200, {
+    ...SECURITY_HEADERS,
+    'Content-Type': 'application/x-ndjson; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'X-Accel-Buffering': 'no',
+  });
+  const abort = new AbortController();
+  const onClose = () => { if (!res.writableEnded) abort.abort(new Error('client-abort')); };
+  res.on('close', onClose);
+
+  try {
+    for await (const event of pullModel({ model, signal: abort.signal })) {
+      writeNdjson(res, {
+        type: 'progress',
+        status: event.status,
+        completed: event.completed ?? null,
+        total: event.total ?? null,
+      });
+    }
+    writeNdjson(res, { type: 'done', model });
+  } catch (err) {
+    if (!res.destroyed && !res.writableEnded) {
+      writeNdjson(res, {
+        type: 'error',
+        code: err.code || 'download-error',
+        message: err.message,
+      });
+    }
+  } finally {
+    res.off('close', onClose);
+    downloadLock.active = false;
+    if (!res.writableEnded && !res.destroyed) res.end();
+  }
+}
+
+async function handleSelectModel(req, res) {
+  const model = await readCatalogModel(req, res);
+  if (!model) return;
+
+  let downloaded;
+  try {
+    downloaded = await listDownloadedModels();
+  } catch (err) {
+    return sendError(res, 502, err.code || 'ollama-unavailable', err.message);
+  }
+  if (!downloaded.includes(model)) {
+    return sendError(res, 409, 'model-not-downloaded', '模型尚未下载，请先下载');
+  }
+
+  try {
+    await saveSelectedModel(model);
+  } catch (err) {
+    return sendError(res, 500, 'storage-error', `配置保存失败: ${err.message}`);
+  }
+  sendJson(res, 200, { ok: true, model });
+}
+
+async function handleListModels(res) {
+  const device = getDeviceInfo();
+  let downloaded = [];
+  try {
+    downloaded = await listDownloadedModels();
+  } catch {
+    // Ollama 不可达时目录仍可浏览，下载标记全部为 false。
+  }
+  sendJson(res, 200, {
+    device,
+    current: CONFIG.model,
+    models: MODEL_CATALOG.map((model) => ({
+      ...model,
+      recommendation: recommendModel(model, device),
+      downloaded: downloaded.includes(model.id),
+      inUse: model.id === CONFIG.model,
+    })),
+  });
 }
 
 async function handleHealth(res) {
@@ -389,6 +496,9 @@ async function route(req, res) {
   const method = req.method || 'GET';
 
   if (pathname === '/api/health' && method === 'GET') return handleHealth(res);
+  if (pathname === '/api/models' && method === 'GET') return handleListModels(res);
+  if (pathname === '/api/models/select' && method === 'POST') return handleSelectModel(req, res);
+  if (pathname === '/api/models/pull' && method === 'POST') return handlePullModel(req, res);
 
   if (pathname === '/api/chats') {
     if (method === 'GET') return handleListChats(res);

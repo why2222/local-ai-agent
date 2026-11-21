@@ -23,6 +23,21 @@ export async function startFakeOllama({ models = ['qwen3-vl:2b-instruct-q4_K_M']
       });
       return;
     }
+    if (req.url === '/api/pull' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk) => { body += chunk; });
+      req.on('end', () => {
+        const payload = JSON.parse(body);
+        state.pulls = state.pulls || [];
+        state.pulls.push(payload);
+        if (state.onPull) state.onPull(payload, req, res);
+        else {
+          res.writeHead(500);
+          res.end('onPull 未设置');
+        }
+      });
+      return;
+    }
     res.writeHead(404);
     res.end();
   });

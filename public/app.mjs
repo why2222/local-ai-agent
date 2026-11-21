@@ -1,4 +1,6 @@
 import { createId } from './id.mjs';
+import { request, requestJson } from './http.mjs';
+import { openSettings } from './settings.mjs';
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -45,21 +47,14 @@ function icon(name, className = 'icon') {
   return svg;
 }
 
-async function request(path, options = {}) {
-  const response = await fetch(path, options);
-  if (!response.ok) {
-    let message = `请求失败（${response.status}）`;
-    try {
-      const data = await response.json();
-      message = data.error?.message || data.error || data.message || message;
-    } catch {}
-    throw new Error(message);
+async function refreshSidebarModel() {
+  try {
+    const data = await requestJson('/api/models');
+    const current = data.models.find((m) => m.id === data.current);
+    document.getElementById('model-name').textContent = current ? `${current.family} · 仅在本机运行` : '仅在本机运行';
+  } catch {
+    // 模型状态由健康检查提示，这里不重复报错。
   }
-  return response;
-}
-
-async function requestJson(path, options = {}) {
-  return (await request(path, options)).json();
 }
 
 function showError(message = '') {
@@ -576,6 +571,14 @@ elements.attach.addEventListener('click', () => elements.imageInput.click());
 elements.imageInput.addEventListener('change', () => selectFile(elements.imageInput.files[0]));
 elements.removeImage.addEventListener('click', clearSelectedFile);
 elements.statusButton.addEventListener('click', checkHealth);
+document.getElementById('settings-button').addEventListener('click', () => {
+  openSettings({
+    onModelChanged: () => {
+      checkHealth();
+      refreshSidebarModel();
+    },
+  });
+});
 elements.sidebarToggle.addEventListener('click', toggleSidebar);
 elements.sidebarBackdrop.addEventListener('click', closeSidebar);
 window.addEventListener('keydown', (event) => {
@@ -588,7 +591,7 @@ window.addEventListener('beforeunload', () => {
 
 async function initialize() {
   try {
-    await Promise.all([loadChats(), checkHealth()]);
+    await Promise.all([loadChats(), checkHealth(), refreshSidebarModel()]);
     if (state.chats.length) {
       await selectChat(state.chats[0].id);
     } else {

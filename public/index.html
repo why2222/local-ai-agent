@@ -22,11 +22,16 @@
       </button>
       <nav class="history" id="chat-list" aria-label="历史会话"></nav>
       <div class="sidebar-bottom">
-        <button class="model-status" id="status-button" type="button" title="重新检查本地模型">
-          <span class="status-dot" id="status-dot" aria-hidden="true"></span>
-          <span id="status-text">正在检查模型</span>
-        </button>
-        <div class="model-name">Qwen3-VL · 仅在本机运行</div>
+        <div class="model-status-row">
+          <button class="model-status" id="status-button" type="button" title="重新检查本地模型">
+            <span class="status-dot" id="status-dot" aria-hidden="true"></span>
+            <span id="status-text">正在检查模型</span>
+          </button>
+          <button class="icon-button small" id="settings-button" type="button" aria-label="模型设置" title="模型设置">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#settings"></use></svg>
+          </button>
+        </div>
+        <div class="model-name" id="model-name">Qwen3-VL · 仅在本机运行</div>
       </div>
     </aside>
     <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" aria-label="关闭会话导航" tabindex="-1"></button>
@@ -77,5 +82,19 @@
     </main>
   </div>
   <script type="module" src="/app.mjs"></script>
+  <dialog class="settings-dialog" id="settings-dialog" aria-labelledby="settings-title">
+    <div class="settings-header">
+      <h2 id="settings-title">模型设置</h2>
+      <button class="icon-button small" id="settings-close" type="button" aria-label="关闭模型设置">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#close"></use></svg>
+      </button>
+    </div>
+    <div class="settings-body">
+      <section class="device-card" id="settings-device" aria-label="当前设备"></section>
+      <div class="settings-error" id="settings-error" role="alert" hidden></div>
+      <div class="model-cards" id="settings-models"></div>
+      <p class="settings-note">仅下载模型时联网，模型来自 Ollama 官方仓库 · 切换立即生效，无需重启</p>
+    </div>
+  </dialog>
 </body>
 </html>

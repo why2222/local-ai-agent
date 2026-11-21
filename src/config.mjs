@@ -1,6 +1,7 @@
 import { readFileSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeJsonAtomic } from './storage.mjs';
 
 const SRC_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT_DIR = path.resolve(SRC_DIR, '..');
@@ -17,8 +18,10 @@ const DEFAULTS = {
   dataDir: 'data',
 };
 
+export const CONFIG_FILE_PATH = process.env.LOCAL_AI_CONFIG_FILE || path.join(ROOT_DIR, 'config.json');
+
 function loadConfigFile() {
-  const configPath = path.join(ROOT_DIR, 'config.json');
+  const configPath = CONFIG_FILE_PATH;
   if (!existsSync(configPath)) return {};
   try {
     return JSON.parse(readFileSync(configPath, 'utf8'));
@@ -76,6 +79,18 @@ function resolveConfig() {
 }
 
 export const CONFIG = resolveConfig();
+
+export async function saveSelectedModel(model) {
+  let raw = {};
+  try {
+    raw = JSON.parse(readFileSync(CONFIG_FILE_PATH, 'utf8'));
+  } catch {
+    // 配置文件缺失或损坏时以当前配置为准重写。
+  }
+  raw.model = model;
+  await writeJsonAtomic(CONFIG_FILE_PATH, raw);
+  CONFIG.model = model;
+}
 
 function isPrivateIPv4(hostname) {
   const parts = hostname.split('.').map(Number);

@@ -30,6 +30,20 @@ export async function checkHealth() {
   return result;
 }
 
+export async function listDownloadedModels() {
+  let res;
+  try {
+    res = await fetch(`${CONFIG.ollamaUrl}/api/tags`, {
+      signal: AbortSignal.timeout(3000),
+    });
+  } catch (err) {
+    throw new OllamaError('ollama-unavailable', `无法连接 Ollama: ${err.message}`);
+  }
+  if (!res.ok) throw new OllamaError('ollama-error', `Ollama 返回错误 HTTP ${res.status}`, res.status);
+  const data = await res.json();
+  return (Array.isArray(data.models) ? data.models : []).map((m) => m?.name).filter(Boolean);
+}
+
 export async function assertModelAvailable() {
   const health = await checkHealth();
   if (!health.ollama.running) {
@@ -122,6 +136,47 @@ export async function* streamChat({ messages, signal }) {
   }
   if (!sawDone && signal && signal.aborted) {
     throw new OllamaError('aborted', '生成已中止');
+  }
+}
+
+// 调用 Ollama /api/pull（stream=true），逐个转发下载进度事件。
+export async function* pullModel({ model, signal }) {
+  let res;
+  try {
+    res = await fetch(`${CONFIG.ollamaUrl}/api/pull`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, stream: true }),
+      signal,
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') throw new OllamaError('aborted', '下载已中止');
+    throw new OllamaError('ollama-unavailable', `无法连接 Ollama: ${err.message}`);
+  }
+  if (!res.ok || !res.body) {
+    let detail = '';
+    try {
+      detail = (await res.text()).slice(0, 300);
+    } catch {
+      // ignore
+    }
+    throw new OllamaError('download-error', `模型下载失败 HTTP ${res.status}${detail ? `: ${detail}` : ''}`, res.status);
+  }
+  try {
+    for await (const line of readNdjsonLines(res.body)) {
+      let parsed;
+      try {
+        parsed = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (parsed.error) throw new OllamaError('download-error', String(parsed.error));
+      yield parsed;
+    }
+  } catch (err) {
+    if (err instanceof OllamaError) throw err;
+    if (err.name === 'AbortError') throw new OllamaError('aborted', '下载已中止');
+    throw new OllamaError('download-error', `下载中断: ${err.message}`);
   }
 }
 
