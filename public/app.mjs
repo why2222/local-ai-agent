@@ -878,6 +878,7 @@ elements.removeDocument.addEventListener('click', clearSelectedDocument);
 elements.imageInput.addEventListener('change', () => selectFile(elements.imageInput.files[0]));
 elements.removeImage.addEventListener('click', clearSelectedFile);
 elements.statusButton.addEventListener('click', checkHealth);
+document.getElementById('sidebar-collapse').addEventListener('click', toggleSidebar);
 elements.sidebarToggle.addEventListener('click', toggleSidebar);
 elements.sidebarBackdrop.addEventListener('click', closeSidebar);
 window.addEventListener('keydown', (event) => {

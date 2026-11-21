@@ -681,3 +681,11 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 .model-picker-wrap { margin-left: auto; }
 .model-picker .model-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: 0 0 auto; }
 .sidebar-bottom .model-status-row { width: 100%; }
+.brand { display: flex; align-items: center; justify-content: space-between; }
+.brand-left { display: flex; align-items: center; gap: 10px; }
+#sidebar-toggle { display: none; }
+.app.sidebar-collapsed #sidebar-toggle { display: grid; }
+@media (max-width: 760px) {
+  #sidebar-toggle { display: grid; }
+  #sidebar-collapse { display: none; }
+}

@@ -20,8 +20,13 @@
   <div class="app" id="app">
     <aside class="sidebar" id="sidebar" aria-label="会话导航">
       <div class="brand">
-        <div class="brand-mark" aria-hidden="true"><svg class="icon"><use href="/icons.svg#spark"></use></svg></div>
-        <strong>本地助手</strong>
+        <div class="brand-left">
+          <div class="brand-mark" aria-hidden="true"><svg class="icon"><use href="/icons.svg#spark"></use></svg></div>
+          <strong>本地助手</strong>
+        </div>
+        <button class="icon-button small" id="sidebar-collapse" type="button" aria-label="收起会话导航" aria-controls="sidebar">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#sidebar"></use></svg>
+        </button>
       </div>
       <button class="nav-item" id="new-chat" type="button">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"></use></svg>
