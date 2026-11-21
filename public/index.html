@@ -3,10 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#f5f4f8">
   <title>本地助手</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <script>
+    (() => {
+      const saved = localStorage.getItem('local-ai-theme') || 'system';
+      const dark = saved === 'dark' || (saved === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    })();
+  </script>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -16,10 +23,17 @@
         <div class="brand-mark" aria-hidden="true"><svg class="icon"><use href="/icons.svg#spark"></use></svg></div>
         <strong>本地助手</strong>
       </div>
-      <button class="new-chat primary-button" id="new-chat" type="button">
+      <button class="nav-item" id="new-chat" type="button">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"></use></svg>
         新建会话
       </button>
+      <button class="nav-item" id="search-toggle" type="button" aria-expanded="false" aria-controls="chat-search-wrap">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#search"></use></svg>
+        搜索
+      </button>
+      <div class="chat-search-wrap" id="chat-search-wrap" hidden>
+        <input id="chat-search" type="search" placeholder="搜索会话" aria-label="搜索会话">
+      </div>
       <nav class="history" id="chat-list" aria-label="历史会话"></nav>
       <div class="sidebar-bottom">
         <div class="model-status-row">
@@ -27,9 +41,21 @@
             <span class="status-dot" id="status-dot" aria-hidden="true"></span>
             <span id="status-text">正在检查模型</span>
           </button>
-          <button class="icon-button small" id="settings-button" type="button" aria-label="模型商店" title="模型商店">
-            <svg class="icon" aria-hidden="true"><use href="/icons.svg#settings"></use></svg>
-          </button>
+          <div class="settings-menu-wrap">
+            <button class="icon-button small" id="settings-button" type="button" aria-label="设置" title="设置" aria-expanded="false" aria-controls="settings-menu">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#settings"></use></svg>
+            </button>
+            <div class="settings-menu" id="settings-menu" hidden>
+              <button class="settings-menu-item" id="settings-store-item" type="button">
+                <svg class="icon" aria-hidden="true"><use href="/icons.svg#settings"></use></svg>
+                模型商店
+              </button>
+              <div class="settings-menu-label">主题</div>
+              <button class="settings-menu-item theme-item" data-theme-value="light" type="button">浅色</button>
+              <button class="settings-menu-item theme-item" data-theme-value="dark" type="button">深色</button>
+              <button class="settings-menu-item theme-item" data-theme-value="system" type="button">跟随系统</button>
+            </div>
+          </div>
         </div>
         <div class="model-name" id="model-name">Qwen3-VL · 仅在本机运行</div>
       </div>
@@ -44,10 +70,7 @@
           </button>
         </div>
         <h1 class="conversation-title" id="conversation-title">新会话</h1>
-        <div class="privacy">
-          <svg class="icon" aria-hidden="true"><use href="/icons.svg#lock"></use></svg>
-          仅在此设备处理
-        </div>
+        <div class="topbar-right"></div>
       </header>
 
       <section class="messages" id="messages" aria-label="对话内容" aria-live="polite" aria-relevant="additions text"></section>
@@ -90,6 +113,13 @@
               </div>
               <input id="image-input" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
               <input id="document-input" type="file" hidden accept=".txt,.md,.json,.csv,.log,.pdf,.docx,.xlsx,.js,.mjs,.cjs,.ts,.tsx,.jsx,.py,.java,.go,.rs,.c,.cpp,.h,.cs,.html,.css,.sh,.yml,.yaml,.toml,.xml,.sql">
+              <div class="model-picker-wrap">
+                <button class="model-picker" id="model-picker" type="button" aria-expanded="false" aria-controls="model-picker-menu">
+                  <span id="model-picker-name">Qwen3-VL · 2B</span>
+                  <svg class="icon chev" aria-hidden="true"><use href="/icons.svg#arrow-up"></use></svg>
+                </button>
+                <div class="model-picker-menu" id="model-picker-menu" hidden></div>
+              </div>
               <button class="send primary-button" id="send-button" type="submit" aria-label="发送消息" disabled>
                 <svg class="icon" aria-hidden="true"><use id="send-icon" href="/icons.svg#arrow-up"></use></svg>
               </button>

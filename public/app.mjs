@@ -64,6 +64,7 @@ async function refreshSidebarModel() {
     const current = data.models.find((m) => m.id === data.current);
     state.currentVision = current ? current.vision !== false : true;
     document.getElementById('model-name').textContent = current ? `${current.family} · 仅在本机运行` : '仅在本机运行';
+    document.getElementById('model-picker-name').textContent = current ? `${current.family} · ${current.params}` : '选择模型';
   } catch {
     // 模型状态由健康检查提示，这里不重复报错。
   }
@@ -111,12 +112,27 @@ async function loadChats() {
   return state.chats;
 }
 
+function relativeTime(iso) {
+  const diff = Date.now() - Date.parse(iso);
+  const min = Math.floor(diff / 60000);
+  if (!Number.isFinite(min) || min < 1) return '刚刚';
+  if (min < 60) return `${min}m`;
+  const hours = Math.floor(min / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d`;
+  return new Date(iso).toLocaleDateString('zh-CN');
+}
+
 function renderChatList() {
   elements.chatList.replaceChildren();
-  if (!state.chats.length) {
+  const visibleChats = state.chatSearch
+    ? state.chats.filter((c) => (c.title || '新会话').toLowerCase().includes(state.chatSearch))
+    : state.chats;
+  if (!visibleChats.length) {
     const empty = document.createElement('div');
     empty.className = 'history-empty';
-    empty.textContent = '还没有历史会话';
+    empty.textContent = state.chatSearch ? '没有匹配的会话' : '还没有历史会话';
     elements.chatList.append(empty);
     return;
   }
@@ -126,17 +142,23 @@ function renderChatList() {
   label.textContent = '会话';
   elements.chatList.append(label);
 
-  for (const chat of state.chats) {
+  for (const chat of visibleChats) {
     const row = document.createElement('div');
     row.className = `history-row${state.currentChat?.id === chat.id ? ' active' : ''}`;
 
     const select = document.createElement('button');
     select.type = 'button';
     select.className = 'history-item';
-    select.textContent = chat.title || '新会话';
     select.title = chat.title || '新会话';
     select.disabled = state.generating;
     select.addEventListener('click', () => selectChat(chat.id));
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'chat-title';
+    titleSpan.textContent = chat.title || '新会话';
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'chat-time';
+    timeSpan.textContent = relativeTime(chat.updatedAt);
+    select.append(titleSpan, timeSpan);
 
     const remove = document.createElement('button');
     remove.type = 'button';
@@ -856,14 +878,6 @@ elements.removeDocument.addEventListener('click', clearSelectedDocument);
 elements.imageInput.addEventListener('change', () => selectFile(elements.imageInput.files[0]));
 elements.removeImage.addEventListener('click', clearSelectedFile);
 elements.statusButton.addEventListener('click', checkHealth);
-document.getElementById('settings-button').addEventListener('click', () => {
-  openSettings({
-    onModelChanged: () => {
-      checkHealth();
-      refreshSidebarModel();
-    },
-  });
-});
 elements.sidebarToggle.addEventListener('click', toggleSidebar);
 elements.sidebarBackdrop.addEventListener('click', closeSidebar);
 window.addEventListener('keydown', (event) => {
@@ -894,3 +908,116 @@ async function initialize() {
 }
 
 initialize();
+
+// 主题切换：浅色 / 深色 / 跟随系统，本地持久化。
+function applyThemeValue(value) {
+  localStorage.setItem('local-ai-theme', value);
+  const dark = value === 'dark' || (value === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  document.querySelectorAll('.theme-item').forEach((item) => {
+    item.classList.toggle('active', item.dataset.themeValue === value);
+  });
+}
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  if ((localStorage.getItem('local-ai-theme') || 'system') === 'system') applyThemeValue('system');
+});
+applyThemeValue(localStorage.getItem('local-ai-theme') || 'system');
+
+function closeSettingsMenu() {
+  document.getElementById('settings-menu').hidden = true;
+  document.getElementById('settings-button').setAttribute('aria-expanded', 'false');
+}
+function openModelStore() {
+  closeSettingsMenu();
+  closeModelPicker();
+  openSettings({
+    onModelChanged: () => {
+      checkHealth();
+      refreshSidebarModel();
+    },
+  });
+}
+
+document.getElementById('settings-button').addEventListener('click', (event) => {
+  event.stopPropagation();
+  const menu = document.getElementById('settings-menu');
+  const open = menu.hidden;
+  menu.hidden = !open;
+  document.getElementById('settings-button').setAttribute('aria-expanded', String(open));
+});
+document.getElementById('settings-store-item').addEventListener('click', openModelStore);
+document.querySelectorAll('.theme-item').forEach((item) => {
+  item.addEventListener('click', () => applyThemeValue(item.dataset.themeValue));
+});
+
+// 输入框模型选择器：快速切换已下载模型或进入模型商店。
+function closeModelPicker() {
+  document.getElementById('model-picker-menu').hidden = true;
+  document.getElementById('model-picker').setAttribute('aria-expanded', 'false');
+}
+async function openModelPicker() {
+  const menu = document.getElementById('model-picker-menu');
+  const data = await requestJson('/api/models');
+  menu.replaceChildren();
+  for (const model of data.models.filter((m) => m.downloaded)) {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = `settings-menu-item${model.id === data.current ? ' active' : ''}`;
+    item.textContent = `${model.family} · ${model.params}`;
+    item.addEventListener('click', async () => {
+      closeModelPicker();
+      if (model.id === data.current) return;
+      try {
+        await requestJson('/api/models/select', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: model.id }),
+        });
+        checkHealth();
+        refreshSidebarModel();
+      } catch (error) {
+        showError(error.message);
+      }
+    });
+    menu.append(item);
+  }
+  const divider = document.createElement('div');
+  divider.className = 'settings-menu-divider';
+  menu.append(divider);
+  const store = document.createElement('button');
+  store.type = 'button';
+  store.className = 'settings-menu-item';
+  store.textContent = '模型商店…';
+  store.addEventListener('click', openModelStore);
+  menu.append(store);
+  menu.hidden = false;
+  document.getElementById('model-picker').setAttribute('aria-expanded', 'true');
+}
+document.getElementById('model-picker').addEventListener('click', (event) => {
+  event.stopPropagation();
+  const menu = document.getElementById('model-picker-menu');
+  if (menu.hidden) openModelPicker().catch((error) => showError(error.message));
+  else closeModelPicker();
+});
+document.addEventListener('click', (event) => {
+  if (!event.target.closest('.settings-menu-wrap')) closeSettingsMenu();
+  if (!event.target.closest('.model-picker-wrap')) closeModelPicker();
+});
+
+// 会话搜索：按标题过滤历史列表。
+document.getElementById('search-toggle').addEventListener('click', () => {
+  const wrap = document.getElementById('chat-search-wrap');
+  wrap.hidden = !wrap.hidden;
+  document.getElementById('search-toggle').setAttribute('aria-expanded', String(!wrap.hidden));
+  if (!wrap.hidden) {
+    document.getElementById('chat-search').focus();
+  } else {
+    document.getElementById('chat-search').value = '';
+    state.chatSearch = '';
+    renderChatList();
+  }
+});
+document.getElementById('chat-search').addEventListener('input', (event) => {
+  state.chatSearch = event.target.value.trim().toLowerCase();
+  renderChatList();
+});
