@@ -347,10 +347,10 @@ async function handleUploadDocument(req, res, chatId) {
 
   let buffer;
   try {
-    buffer = await readBody(req, 1024 * 1024);
+    buffer = await readBody(req, 100 * 1024 * 1024);
   } catch (err) {
     if (err.code === 'payload-too-large') {
-      return sendError(res, 413, 'too-large', '文档超过 1 MiB 大小限制');
+      return sendError(res, 413, 'too-large', '文档超过 100 MiB 大小限制');
     }
     throw err;
   }

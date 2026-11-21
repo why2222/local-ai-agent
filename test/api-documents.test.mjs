@@ -61,7 +61,7 @@ function completeChat(payload, req, res) {
 test('拒绝不支持的文档类型和超限文件', async () => {
   const chat = await createChat();
   assert.equal((await uploadDocument(chat.id, 'a.exe', Buffer.from('x'))).status, 415);
-  assert.equal((await uploadDocument(chat.id, 'big.txt', Buffer.alloc(1024 * 1024 + 1, 65))).status, 413);
+  assert.equal((await uploadDocument(chat.id, 'big.txt', Buffer.alloc(100 * 1024 * 1024 + 1, 65))).status, 413);
 });
 
 test('上传文本文件返回批次信息，原文可读取', async () => {

@@ -401,8 +401,8 @@ function selectDocument(file) {
     showError('仅支持文本、代码、PDF、DOCX、XLSX 文档。');
     return;
   }
-  if (file.size > 1024 * 1024) {
-    showError('文档不能超过 1 MiB。');
+  if (file.size > 100 * 1024 * 1024) {
+    showError('文档不能超过 100 MiB。');
     return;
   }
   clearSelectedFile();

@@ -45,7 +45,7 @@ async function extractPdf(filePath) {
   try {
     const { stdout } = await execFileAsync('pdftotext', ['-layout', filePath, '-'], {
       timeout: 30000,
-      maxBuffer: 8 * 1024 * 1024,
+      maxBuffer: 64 * 1024 * 1024,
     });
     return stdout;
   } catch (err) {
@@ -87,7 +87,7 @@ function readZipEntriesUnsafe(buffer) {
     const localExtraLen = buffer.readUInt16LE(localOffset + 28);
     const dataStart = localOffset + 30 + localNameLen + localExtraLen;
     const data = buffer.subarray(dataStart, dataStart + size);
-    entries.set(name, method === 8 ? inflateRawSync(data, { maxOutputLength: 8 * 1024 * 1024 }) : data);
+    entries.set(name, method === 8 ? inflateRawSync(data, { maxOutputLength: 64 * 1024 * 1024 }) : data);
     ptr += 46 + nameLen + extraLen + commentLen;
   }
   return entries;
