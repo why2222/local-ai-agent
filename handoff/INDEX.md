@@ -27,7 +27,7 @@
 
 2026-11-21 模型目录升级（C 方案）：内置扩充至 13 个（多模态全档位+热门纯文本含 DeepSeek 系列），新增"在线获取更多模型"按钮（二次确认才连接 ollama.com，不上传应用数据），`src/model-library.mjs` 解析官方库 HTML（实测 271 个模型）并缓存 `data/model-cache.json`，失败回退内置。`POST /api/models/fetch-remote`；目录按使用中→多模态→内置→推荐度排序；纯文本模型发送图片被前后端拦截（`model-no-vision`）；不推荐模型下载需二次确认（可取消）。决策与隐私评估见 `docs/adr/0004-online-model-library.md`。
 
-2026-11-21 设置面板 UI 改版（用户预览三版设计稿后选 A）：全宽大卡片改为紧凑行列表 + 顶部搜索/筛选 + 在线目录默认折叠（搜索或已下载筛选时自动展开）+ 点击行内联展开详情。过滤分组抽为纯函数 `public/model-view.mjs`（有测试）。修复了展开状态哨兵误用（收起后刷新被重展开）与 ARIA 嵌套按钮问题。随后按用户反馈将弹窗加宽至 880px，滚动条统一为 macOS 风格细圆角半透明样式。见 `docs/adr/0005-settings-panel-compact.md`，设计稿在 `runtime/design/`。
+2026-11-21 设置面板 UI 改版（用户预览三版设计稿后选 A）：全宽大卡片改为紧凑行列表 + 顶部搜索/筛选 + 在线目录默认折叠（搜索或已下载筛选时自动展开）+ 点击行内联展开详情。过滤分组抽为纯函数 `public/model-view.mjs`（有测试）。修复了展开状态哨兵误用（收起后刷新被重展开）与 ARIA 嵌套按钮问题。随后按用户反馈将弹窗加宽至 880px，滚动条统一为 macOS 风格细圆角半透明样式，并修复弹窗双滚动条问题（外框 `overflow: hidden`，仅内容区滚动）。见 `docs/adr/0005-settings-panel-compact.md`，设计稿在 `runtime/design/`。
 
 服务当前在运行：应用 `0.0.0.0:43210`，Ollama `127.0.0.1:11434`。**2026-11-21 已按用户确认启用远程访问模式**：`LOCAL_AI_ALLOW_LAN=1` + `LOCAL_AI_REMOTE_HOST=remote-access-18266.zconnect.cn` + `LOCAL_AI_REMOTE_TOKEN`（令牌仅存于进程环境变量，不写入本文档与仓库）。启动时全链路已验证：回环/局域网 200、远程无令牌或错令牌 401、正确令牌 API 200、页面 302+安全 Cookie、Cookie 访问 200、其他域名 403。关闭方式：去掉这两个 REMOTE 环境变量重启。
 
