@@ -31,12 +31,13 @@ for path in src public scripts package.json README.md CONTEXT.md docs; do
 done
 
 cd "$ROOT_DIR"
-bash scripts/setup.sh
 if pgrep -f 'node src/server.mjs' >/dev/null 2>&1; then
-  log "重启本地服务"
+  log "重启本地服务以应用更新"
   pkill -f 'node src/server.mjs' || true
   sleep 1
 fi
 start_service
 open_app
+log "后台下载/校验默认模型，下载完成后即可聊天；进度见 data/logs/model-download.log"
+nohup bash scripts/setup.sh >"$ROOT_DIR/data/logs/model-download.log" 2>&1 &
 log "更新完成。"

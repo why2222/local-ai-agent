@@ -26,8 +26,7 @@ for _ in {1..60}; do
 done
 
 if ! "$OLLAMA_BIN" show "$MODEL" >/dev/null 2>&1; then
-  echo "模型尚未安装，请先运行 npm run setup。"
-  exit 1
+  echo "提示：模型 $MODEL 尚未下载。服务将正常启动，可在模型商店中下载，或之后运行 npm run setup 下载。"
 fi
 
 cd "$ROOT_DIR"
