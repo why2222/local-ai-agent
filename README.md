@@ -60,9 +60,17 @@ gh release create v1.0.0 runtime/release/local-ai.zip --generate-notes
 
 **用户安装**：
 
-1. 下载 `local-ai.zip` 并解压。
-2. 双击 `Install.command`（未签名，首次需右键 → 打开）。脚本会自动安装便携版 Node.js、Ollama 和模型（首次需下载约 2-4 GB，无需管理员密码）。
-3. 完成后浏览器自动打开应用。
+方式一（推荐，一行命令，无 Gatekeeper 拦截）：打开"终端"，粘贴执行：
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/why2222/local-ai-agent/main/scripts/launcher/web-install.sh)"
+```
+
+自动下载最新版本、安装便携 Node.js、Ollama 和模型，完成后浏览器自动打开应用。默认安装到 `~/Applications/local-ai`。
+
+方式二（zip 安装）：下载 `local-ai.zip` 解压，双击 `Install.command`。macOS 对未签名脚本会提示"无法验证"，此时到"系统设置 → 隐私与安全性"底部点"仍要打开"，或在终端执行 `xattr -dr com.apple.quarantine <解压后的目录>` 后再双击。
+
+首次需下载约 2-4 GB，无需管理员密码。
 
 **日常使用与更新**：
 

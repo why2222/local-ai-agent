@@ -32,7 +32,7 @@ ensure_node() {
 }
 
 ensure_ollama_mac() {
-  [[ "$(uname -s)" == "Darwin" ]] || return
+  if [[ "$(uname -s)" != "Darwin" ]]; then return 0; fi
   if command -v ollama >/dev/null 2>&1 || [[ -x /Applications/Ollama.app/Contents/Resources/ollama ]]; then return; fi
   local app_dir="$ROOT_DIR/runtime/ollama/Ollama.app"
   if [[ ! -x "$app_dir/Contents/Resources/ollama" ]]; then
@@ -54,7 +54,7 @@ start_service() {
     mkdir -p "$ROOT_DIR/data/logs"
     nohup bash scripts/start.sh >"$ROOT_DIR/data/logs/launcher.log" 2>&1 &
     for _ in {1..90}; do
-      curl --fail --silent http://127.0.0.1:43210/api/health >/dev/null 2>&1 && break
+      if curl --fail --silent http://127.0.0.1:43210/api/health >/dev/null 2>&1; then break; fi
       sleep 1
     done
   fi
