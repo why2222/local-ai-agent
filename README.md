@@ -70,6 +70,25 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/why2222/local-ai-agent/m
 
 方式二（zip 安装）：下载 `local-ai.zip` 解压，双击 `Install.command`。macOS 对未签名脚本会提示"无法验证"，此时到"系统设置 → 隐私与安全性"底部点"仍要打开"，或在终端执行 `xattr -dr com.apple.quarantine <解压后的目录>` 后再双击。
 
+方式三（交给 AI 代理安装）：把下面这段提示词发给 Codex、Kimi Code 等 agent，它会自动完成部署和验证（完整部署指南见 `docs/deployment.md`）：
+
+```text
+请帮我在本机安装并启动"本地 AI 助手"项目。
+
+步骤：
+1. 阅读部署指南：https://github.com/why2222/local-ai-agent/blob/main/docs/deployment.md
+2. 在终端执行一行安装命令：
+   bash -c "$(curl -fsSL https://raw.githubusercontent.com/why2222/local-ai-agent/main/scripts/launcher/web-install.sh)"
+   （需要联网，约 2-4 GB 下载，无需 sudo）
+3. 验证安装：curl -s http://127.0.0.1:43210/api/health，确认返回 ok:true。
+4. 打开浏览器 http://127.0.0.1:43210，确认能发送一条消息并有流式回答。
+
+要求：
+- 不要修改 config.json 和启动脚本，不要使用云端模型或公网隧道。
+- 如果安装脚本失败，先用 bash -x 跟踪定位，不要跳过步骤或改架构。
+- 安装完成后告诉我访问地址和启动命令（Start.command）。
+```
+
 首次需下载约 2-4 GB，无需管理员密码。
 
 **日常使用与更新**：
