@@ -54,10 +54,21 @@ start_service() {
     cd "$ROOT_DIR"
     mkdir -p "$ROOT_DIR/data/logs"
     nohup bash scripts/start.sh >"$ROOT_DIR/data/logs/launcher.log" 2>&1 &
+    local waited=0
     for _ in {1..90}; do
       if curl --fail --silent http://127.0.0.1:43210/api/health >/dev/null 2>&1; then break; fi
       sleep 1
+      waited=$((waited + 1))
+      if [[ $((waited % 10)) -eq 0 ]]; then
+        log "正在等待服务就绪…（已等待 ${waited} 秒）"
+      fi
     done
+    if ! curl --fail --silent http://127.0.0.1:43210/api/health >/dev/null 2>&1; then
+      log "服务启动超时，最近日志如下："
+      tail -20 "$ROOT_DIR/data/logs/launcher.log" 2>/dev/null || true
+      log "请把以上日志发给我排查；也可先运行 bash scripts/setup.sh 检查 Ollama 与模型。"
+      return 1
+    fi
   fi
 }
 
