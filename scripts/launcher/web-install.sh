@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+if [ -z "${BASH_VERSION:-}" ]; then exec /bin/bash "$0" "$@"; fi
 set -euo pipefail
 
 # 一行安装：bash -c "$(curl -fsSL https://raw.githubusercontent.com/why2222/local-ai-agent/main/scripts/launcher/web-install.sh)"
