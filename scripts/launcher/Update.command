@@ -4,12 +4,16 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 ensure_node
 log "检查最新版本（$RELEASE_REPO）"
-latest_url="$(curl --fail --silent "https://api.github.com/repos/$RELEASE_REPO/releases/latest" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s);const a=(r.assets||[]).find(a=>a.name.endsWith('.zip'));console.log(a?a.browser_download_url:'');})")"
-[[ -n "$latest_url" ]] || fail "未找到发布包，请检查 RELEASE_REPO 配置。"
+auth_header=()
+if [[ -n "${LOCAL_AI_GITHUB_TOKEN:-}" ]]; then
+  auth_header=(-H "Authorization: Bearer $LOCAL_AI_GITHUB_TOKEN")
+fi
+latest_url="$(curl --fail --silent "${auth_header[@]}" "https://api.github.com/repos/$RELEASE_REPO/releases/latest" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s);const a=(r.assets||[]).find(a=>a.name.endsWith('.zip'));console.log(a?a.browser_download_url:'');})")"
+[[ -n "$latest_url" ]] || fail "未找到发布包。私有仓库需设置 LOCAL_AI_GITHUB_TOKEN（有该仓库读取权限的 GitHub token）。"
 
 log "下载最新版本"
 mkdir -p "$ROOT_DIR/runtime/downloads"
-curl --fail --location --output "$ROOT_DIR/runtime/downloads/update.zip" "$latest_url"
+curl --fail --location "${auth_header[@]}" --output "$ROOT_DIR/runtime/downloads/update.zip" "$latest_url"
 
 log "安装更新（保留聊天数据、模型和本机配置）"
 extract_dir="$ROOT_DIR/runtime/downloads/update-extract"

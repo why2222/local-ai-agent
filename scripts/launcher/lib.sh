@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 NODE_VERSION="v22.23.5"
-RELEASE_REPO="${LOCAL_AI_RELEASE_REPO:-your-name/local-ai-assistant}"
+RELEASE_REPO="${LOCAL_AI_RELEASE_REPO:-why2222/local-ai-agent}"
 
 log() { printf '[本地助手] %s\n' "$*"; }
 fail() { printf '[本地助手] 错误：%s\n' "$*" >&2; exit 1; }
