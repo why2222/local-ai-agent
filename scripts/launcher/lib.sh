@@ -64,7 +64,9 @@ open_app() {
   local port
   port="$(node -e "console.log(JSON.parse(require('node:fs').readFileSync('$ROOT_DIR/config.json','utf8')).port)")"
   if command -v open >/dev/null 2>&1; then
-    open "http://127.0.0.1:$port"
+    if ! open "http://127.0.0.1:$port" 2>/dev/null; then
+      log "请打开浏览器访问 http://127.0.0.1:$port"
+    fi
   else
     log "请打开浏览器访问 http://127.0.0.1:$port"
   fi
