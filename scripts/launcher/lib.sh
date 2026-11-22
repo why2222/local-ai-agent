@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 if [ -z "${BASH_VERSION:-}" ]; then exec /bin/bash "$0" "$@"; fi
-set -euo pipefail
+set -eo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
 NODE_VERSION="v22.23.5"
 RELEASE_REPO="${LOCAL_AI_RELEASE_REPO:-why2222/local-ai-agent}"
 

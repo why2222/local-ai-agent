@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 if [ -z "${BASH_VERSION:-}" ]; then exec /bin/bash "$0" "$@"; fi
-set -euo pipefail
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+set -eo pipefail
+source "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib.sh"
 
 log "开始安装本地 AI 助手（首次需下载 Ollama 与模型，约 2-4 GB，请保持联网）"
 ensure_node
