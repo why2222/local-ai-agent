@@ -77,6 +77,7 @@ test('健康检查返回模型与配置', async () => {
   assert.equal(res.status, 200);
   const data = JSON.parse(res.text);
   assert.equal(data.ok, true);
+  assert.equal(data.config.rootDir, CONFIG.rootDir);
   assert.equal(data.config.model, CONFIG.model);
 });
 

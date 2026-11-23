@@ -2,7 +2,7 @@
 if [ -z "${BASH_VERSION:-}" ]; then exec /bin/bash "$0" "$@"; fi
 set -eo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd -P)"
 NODE_VERSION="v22.23.5"
 RELEASE_REPO="${LOCAL_AI_RELEASE_REPO:-why2222/local-ai-agent}"
 
@@ -47,23 +47,50 @@ ensure_ollama_mac() {
   fi
 }
 
+service_is_current() {
+  local service_root
+  service_root="$(curl --fail --silent http://127.0.0.1:43210/api/health 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).config?.rootDir||"")}catch{process.exit(1)}})')" || return 1
+  [[ "$service_root" == "$ROOT_DIR" ]]
+}
+
+stop_service() {
+  local pids=""
+  if command -v lsof >/dev/null 2>&1; then
+    pids="$(lsof -nP -iTCP:43210 -sTCP:LISTEN -t 2>/dev/null || true)"
+  fi
+  if [[ -z "$pids" ]]; then
+    pids="$(pgrep -f '(^|/)node src/server\.mjs$' 2>/dev/null || true)"
+  fi
+  [[ -n "$pids" ]] || return 0
+  kill $pids 2>/dev/null || true
+  for _ in {1..10}; do
+    if ! kill -0 $pids 2>/dev/null; then return 0; fi
+    sleep 1
+  done
+  kill -9 $pids 2>/dev/null || true
+}
+
 start_service() {
   ensure_node
-  if ! curl --fail --silent http://127.0.0.1:43210/api/health >/dev/null 2>&1; then
+  if ! service_is_current; then
+    if curl --fail --silent http://127.0.0.1:43210/api/health >/dev/null 2>&1; then
+      log "检测到旧目录的服务仍在运行，正在重启"
+      stop_service
+    fi
     log "启动本地服务"
     cd "$ROOT_DIR"
     mkdir -p "$ROOT_DIR/data/logs"
     nohup bash scripts/start.sh >"$ROOT_DIR/data/logs/launcher.log" 2>&1 &
     local waited=0
     for _ in {1..90}; do
-      if curl --fail --silent http://127.0.0.1:43210/api/health >/dev/null 2>&1; then break; fi
+      if service_is_current; then break; fi
       sleep 1
       waited=$((waited + 1))
       if [[ $((waited % 10)) -eq 0 ]]; then
         log "正在等待服务就绪…（已等待 ${waited} 秒）"
       fi
     done
-    if ! curl --fail --silent http://127.0.0.1:43210/api/health >/dev/null 2>&1; then
+    if ! service_is_current; then
       log "服务启动超时，最近日志如下："
       tail -20 "$ROOT_DIR/data/logs/launcher.log" 2>/dev/null || true
       log "请把以上日志发给我排查；也可先运行 bash scripts/setup.sh 检查 Ollama 与模型。"

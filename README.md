@@ -93,7 +93,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/why2222/local-ai-agent/m
 
 **日常使用与更新**：
 
-- `Start.command`：启动服务并打开浏览器。
+- `Start.command`：启动服务并打开浏览器。移动整个项目文件夹后，在新位置重新双击它，会自动停止旧目录的服务并从新位置重启。
 - `Update.command`：从 GitHub Releases 拉取最新版本并更新，保留聊天数据、模型和本机配置。
 
 数据目录（`data/`）、模型、Node 与 Ollama 运行时（`runtime/`）都在项目目录内，更新不会覆盖。

@@ -78,6 +78,7 @@ function resolveConfig() {
   }
 
   return {
+    rootDir: ROOT_DIR,
     model: config.model,
     port,
     numCtx,

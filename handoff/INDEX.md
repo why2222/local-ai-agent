@@ -1,6 +1,6 @@
 # 项目状态快照：本地 AI 助手
 
-更新时间：2026-11-21。本文件是项目级状态快照，新会话先读本文件，再按需深入子文件。
+更新时间：2026-11-23。本文件是项目级状态快照，新会话先读本文件，再按需深入子文件。
 
 ## 目标与验收
 
@@ -43,6 +43,8 @@
 
 2026-11-22 分发方案（GitHub Releases zip + 一键启动器）：`scripts/launcher/` 提供 Install/Start/Update.command（便携 Node 免 sudo、Ollama.app 项目内安装、模型下载、启动打开浏览器、保留数据的更新），`scripts/pack-release.sh` 生成 local-ai.zip，`gh release create` 发布。`RELEASE_REPO` 需改为维护者仓库。**macOS 双击流程未在 M2 真机验证**，首次在 M2 需实测。见 `docs/adr/0011-distribution-launcher.md`。
 
+2026-11-23 修复移动项目目录后首页返回 `not-found`：旧目录进程仍占用 43210，启动器原先只检查端口健康而直接复用。现在健康检查返回 `config.rootDir`，`Start.command` 发现目录不一致或旧版本缺少该字段时，通过 `lsof` 定位监听进程并等待退出后从当前目录重启（无 `lsof` 时用锚定进程名回退）；自定义数据目录不影响判断。回归测试覆盖旧版/新版异目录服务、当前目录复用与全新启动。Linux 自动化验证通过，M2 桌面移动场景仍待用户真机确认。
+
 服务当前在运行：应用 `0.0.0.0:43210`，Ollama `127.0.0.1:11434`。**2026-11-21 已按用户确认启用远程访问模式**：`LOCAL_AI_ALLOW_LAN=1` + `LOCAL_AI_REMOTE_HOST=remote-access-18266.zconnect.cn` + `LOCAL_AI_REMOTE_TOKEN`（令牌仅存于进程环境变量，不写入本文档与仓库）。启动时全链路已验证：回环/局域网 200、远程无令牌或错令牌 401、正确令牌 API 200、页面 302+安全 Cookie、Cookie 访问 200、其他域名 403。关闭方式：去掉这两个 REMOTE 环境变量重启。
 
 ## 关键决策
@@ -72,7 +74,7 @@
 
 ## 验证与测试
 
-- `npm test`：126 个用例，Node 内置 `node:test`，零依赖，约 1 秒。覆盖前端 `createId`、config/Host 校验、storage 原子写入、chat-store（含损坏隔离）、image-store 签名校验、ollama 请求构造与流式/中止/输出上限/结束原因、HTTP API 集成（路径穿越、生成锁、停止生成）、模型目录与推荐分档（含 Apple Silicon）、模型列表/切换/下载 API（进度、错误、下载锁）、远程访问模式（令牌、Cookie、Origin、配置校验）、在线目录解析/缓存/合并与纯文本图片拦截、面板视图过滤分组、文档提取（txt/pdf/docx/xlsx）与分批摘要 API、Markdown 解析、截断续写与重复循环检测。
+- `npm test`：130 个用例，Node 内置 `node:test`，零依赖，约 5 秒。覆盖前端 `createId`、config/Host 校验、storage 原子写入、chat-store（含损坏隔离）、image-store 签名校验、ollama 请求构造与流式/中止/输出上限/结束原因、HTTP API 集成（路径穿越、生成锁、停止生成）、模型目录与推荐分档（含 Apple Silicon）、模型列表/切换/下载 API（进度、错误、下载锁）、远程访问模式（令牌、Cookie、Origin、配置校验）、在线目录解析/缓存/合并与纯文本图片拦截、面板视图过滤分组、文档提取（txt/pdf/docx/xlsx）与分批摘要 API、Markdown 解析、截断续写与重复循环检测、启动器目录移动与复用。
 - 测试一律用进程内假 Ollama + 临时数据目录，不加载真实模型、不读写真实 `data/`；真实模型验证保持手工冒烟。
 - `npm run check`：全部 src 与 public 模块（含 `public/id.mjs`）的 `node --check` 语法检查。
 - 前端 DOM 交互无自动化测试，仍靠浏览器手工回归。

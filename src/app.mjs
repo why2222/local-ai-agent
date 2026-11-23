@@ -248,6 +248,7 @@ async function handleHealth(res) {
   sendJson(res, 200, {
     ...health,
     config: {
+      rootDir: CONFIG.rootDir,
       model: CONFIG.model,
       numCtx: CONFIG.numCtx,
       maxImageBytes: CONFIG.maxImageBytes,
