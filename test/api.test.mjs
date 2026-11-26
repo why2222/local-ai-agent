@@ -231,3 +231,25 @@ test('后台生成：断连不中止，stop 接口停止保存 stopped 部分回
   });
   assert.equal(again.status, 200);
 });
+
+test('服务重启后遗留的 streaming 消息标记为 stopped，页面可结束轮询并新建会话', async () => {
+  const chat = await createChat();
+  chat.messages.push(
+    { id: 'user-before-restart', role: 'user', text: '哈喽！', status: 'complete' },
+    { id: 'assistant-before-restart', role: 'assistant', text: '', status: 'streaming' },
+  );
+  const { saveChat } = await import('../src/chat-store.mjs');
+  await saveChat(chat);
+
+  const res = await apiRequest({ path: `/api/chats/${chat.id}` });
+  assert.equal(res.status, 200);
+  const recovered = JSON.parse(res.text).chat;
+  assert.equal(recovered.messages.at(-1).status, 'stopped');
+
+  const reread = await apiRequest({ path: `/api/chats/${chat.id}` });
+  assert.equal(JSON.parse(reread.text).chat.messages.at(-1).status, 'stopped');
+
+  const newChat = await apiRequest({ method: 'POST', path: '/api/chats' });
+  assert.equal(newChat.status, 201);
+  assert.notEqual(JSON.parse(newChat.text).chat.id, chat.id);
+});

@@ -269,8 +269,22 @@ async function handleCreateChat(res) {
 }
 
 async function handleGetChat(res, id) {
-  const chat = await getChat(id);
+  let chat = await getChat(id);
   if (!chat) return sendError(res, 404, 'chat-not-found', '会话不存在');
+  let last = chat.messages.at(-1);
+  if (last?.role === 'assistant' && last.status === 'streaming' && acquireLock()) {
+    try {
+      chat = await getChat(id);
+      if (!chat) return sendError(res, 404, 'chat-not-found', '会话不存在');
+      last = chat.messages.at(-1);
+      if (last?.role === 'assistant' && last.status === 'streaming') {
+        last.status = 'stopped';
+        await saveChat(chat);
+      }
+    } finally {
+      releaseLock();
+    }
+  }
   sendJson(res, 200, { chat });
 }
 
