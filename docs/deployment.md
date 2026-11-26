@@ -83,7 +83,7 @@ curl -s http://127.0.0.1:43210/api/health
 | 模型未就绪 | 重跑 `npm run setup`；查 `data/logs/ollama-setup.log` |
 | 生成很慢/内存不足 | 关闭大程序、降 `numCtx` 到 1024；本机小内存是主要限制 |
 | 端口 43210 被占 | 改 `config.json` 的 `port` 后重启 |
-| api.github.com 不可达 | 网络限制时用网页手动发 release 或配置代理；`releases/latest/download/local-ai.zip` 不经 API 也可下载 |
+| 更新时 GitHub 下载失败 | 检查网络及 `releases/latest/download/local-ai.zip` 是否可访问；更新器不依赖 `api.github.com`，私有仓库需配置读取令牌 |
 | 模型输出截断/死循环 | 摘要已内建 `num_predict=400` + 截断续写与重复检测；更新到最新版即可 |
 
 ## 8. 隐私与安全边界（代理必须遵守）

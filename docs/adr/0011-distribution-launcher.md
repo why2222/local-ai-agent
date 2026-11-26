@@ -5,7 +5,7 @@
 决定：不做 Electron（避免签名/公证与打包工程量），改为 Releases 发布 `local-ai.zip`：
 - `Install.command`：便携 Node.js（免 sudo）、Ollama.app 项目内安装（`runtime/ollama/Ollama.app`，`ollama-env.sh`/`install-ollama.sh` 已支持该路径）、模型下载、启动并打开浏览器。
 - `Start.command`：启动服务并打开浏览器；健康检查返回项目根目录，若 43210 端口仍是移动前旧目录的服务，则先停止旧进程再从当前目录重启。
-- `Update.command`：拉取最新 release zip，覆盖代码目录（src/public/scripts/docs 等），保留 `data/`、`runtime/`、`config.json`。
+- `Update.command`：通过 `releases/latest/download/local-ai.zip` 直链拉取最新 release zip，不依赖 GitHub API 元数据；覆盖代码目录（src/public/scripts/docs 等），保留 `data/`、`runtime/`、`config.json`。
 - `scripts/pack-release.sh` 生成 zip（根目录含三个启动器）。
 
 ## Consequences

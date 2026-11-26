@@ -75,3 +75,24 @@ test('没有服务时直接启动，不执行结束进程操作', async (t) => {
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.equal(actions, 'nohup\n');
 });
+
+test('更新使用 Release 直链，API 空响应不会触发 JSON 解析异常', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'local-ai-update-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const urls = path.join(root, 'urls');
+  const update = path.resolve('scripts/launcher/Update.command');
+  const script = `
+    curl() {
+      printf '%s\\n' "$*" >> ${shellQuote(urls)}
+      return 22
+    }
+    source ${shellQuote(update)}
+  `;
+  const result = spawnSync('/bin/bash', ['-c', script], { encoding: 'utf8' });
+  const output = result.stdout + result.stderr;
+  const requestedUrls = existsSync(urls) ? await readFile(urls, 'utf8') : '';
+  assert.notEqual(result.status, 0);
+  assert.doesNotMatch(output, /Unexpected end of JSON input/);
+  assert.doesNotMatch(requestedUrls, /api\.github\.com/);
+  assert.match(requestedUrls, /releases\/latest\/download\/local-ai\.zip/);
+});
